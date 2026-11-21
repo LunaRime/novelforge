@@ -6,6 +6,7 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const projectTexts = {
+  'usage.projectDistribution': { 'zh-CN': "项目用量对比", 'en-US': "Usage by project", 'ru-RU': "Расход по проектам" },
   'project.fileEditorAgentTitle': { 'zh-CN': '与 Agent 讨论已保存的正文', 'en-US': 'Ask Agent about the saved manuscript', 'ru-RU': 'Обсудить сохранённую рукопись с агентом' },
   'project.fileEditorAgentQuestion': { 'zh-CN': '关于正文的问题', 'en-US': 'Question about the manuscript', 'ru-RU': 'Вопрос о рукописи' },
   'project.fileEditorAgentAsk': { 'zh-CN': '提问', 'en-US': 'Ask', 'ru-RU': 'Спросить' },
@@ -346,6 +347,14 @@ export const projectTexts = {
   'version.selectChapter': { 'zh-CN': '选择一个章节', 'en-US': 'Select a chapter', 'ru-RU': 'Выберите главу' },
   'focus.enter': { 'zh-CN': '专注模式', 'en-US': 'Focus Mode', 'ru-RU': 'Режим фокуса' },
   'focus.exit': { 'zh-CN': '退出专注模式', 'en-US': 'Exit focus mode', 'ru-RU': 'Выйти из режима фокуса' },
+  'reader.enter': { 'zh-CN': '阅读模式', 'en-US': 'Reading mode', 'ru-RU': 'Режим чтения' },
+  'reader.exit': { 'zh-CN': '退出阅读模式', 'en-US': 'Exit reading mode', 'ru-RU': 'Выйти из режима чтения' },
+  'reader.novel': { 'zh-CN': '切换小说', 'en-US': 'Switch novel', 'ru-RU': 'Выбрать роман' },
+  'reader.chapters': { 'zh-CN': '切换章节', 'en-US': 'Switch chapter', 'ru-RU': 'Выбрать главу' },
+  'reader.body': { 'zh-CN': '章节正文', 'en-US': 'Chapter text', 'ru-RU': 'Текст главы' },
+  'reader.empty': { 'zh-CN': '这部小说还没有可阅读的章节。', 'en-US': 'This novel has no readable chapters yet.', 'ru-RU': 'В этом романе пока нет глав для чтения.' },
+  'reader.previous': { 'zh-CN': '上一章', 'en-US': 'Previous chapter', 'ru-RU': 'Предыдущая глава' },
+  'reader.next': { 'zh-CN': '下一章', 'en-US': 'Next chapter', 'ru-RU': 'Следующая глава' },
   'update.newVersion': { 'zh-CN': '发现新版本', 'en-US': 'New version found', 'ru-RU': 'Найдена новая версия' },
   'update.downloaded': { 'zh-CN': '更新已下载完成！重启应用以安装新版本。', 'en-US': 'Update downloaded! Restart to install.', 'ru-RU': 'Обновление загружено! Перезапустите для установки.' },
   'update.installing': { 'zh-CN': '立即更新', 'en-US': 'Update now', 'ru-RU': 'Обновить сейчас' },
@@ -385,6 +394,8 @@ export const projectTexts = {
   'usage.activityTitle': { 'zh-CN': '活跃度', 'en-US': 'Activity', 'ru-RU': 'Активность' },
   'usage.recentSessions': { 'zh-CN': '最近会话', 'en-US': 'Recent sessions', 'ru-RU': 'Недавние сессии' },
   'usage.purposeDistribution': { 'zh-CN': '用途分布', 'en-US': 'Usage by purpose', 'ru-RU': 'Распределение по назначению' },
+  'usage.chartCost': { 'zh-CN': "费用 USD", 'en-US': "Cost (USD)", 'ru-RU': "Расходы (USD)" },
+  'usage.chartTrend': { 'zh-CN': "每日用量柱状图", 'en-US': "Daily usage bar chart", 'ru-RU': "Столбчатая диаграмма по дням" },
   'usage.modelDistribution': { 'zh-CN': '模型分布', 'en-US': 'Usage by model', 'ru-RU': 'Распределение по моделям' },
   'usage.noSessions': { 'zh-CN': '该时间段内暂无会话', 'en-US': 'No sessions in this period', 'ru-RU': 'В этом периоде нет сессий' },
   'usage.other': { 'zh-CN': '其它', 'en-US': 'Other', 'ru-RU': 'Другое' },

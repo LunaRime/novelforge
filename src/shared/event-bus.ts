@@ -23,6 +23,8 @@ export type GlobalEventType =
   // --- 项目级事件 ---
   | 'PROJECT_CHANGED'
   | 'OPEN_FILE_PROJECT_EDITOR'
+  | 'OPEN_KNOWLEDGE_SEARCH'
+  | 'KNOWLEDGE_DOCUMENT_REMOVED'
   // --- 系统通知 ---
   | 'SYSTEM_NOTICE'
 
@@ -56,6 +58,8 @@ export interface EventPayloadMap {
     projectPath: string
   }
   'OPEN_FILE_PROJECT_EDITOR': { projectPath?: string }
+  'OPEN_KNOWLEDGE_SEARCH': Record<string, never>
+  'KNOWLEDGE_DOCUMENT_REMOVED': { projectSession: number }
   'SYSTEM_NOTICE': {
     level: 'info' | 'success' | 'warn' | 'error'
     message: string

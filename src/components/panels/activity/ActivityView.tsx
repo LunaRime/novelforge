@@ -10,7 +10,7 @@
  * 统计条恒定显示全局总计 + 当前范围。
  */
 import { useEffect, useState } from 'react'
-import { Activity, PenLine, RefreshCw, Sparkles, BookOpen, Wallet, AlertCircle } from 'lucide-react'
+import { Activity, PenLine, RefreshCw, Sparkles, BookOpen, Wallet, AlertCircle, Globe } from 'lucide-react'
 import { Spinner } from '../../ui/Spinner'
 import { getCurrentLocale, t } from '../../../shared/locale'
 import { getDailyActivity } from '../../../services/stats-service'
@@ -21,7 +21,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '.
 import { Button } from '../../ui/Button'
 import { ipc } from '../../../services/ipc-client'
 import { toast } from '../../ui/Toast'
-import { SegmentedControl } from '../../ui/SegmentedControl'
+import { FilterButtons } from '../../ui/ChoiceControls'
 import { buildYearlySummary, buildYearlyReportHTML } from '../../../services/yearly-report'
 
 /** 数据拉取天数（10 年等效全量——月度视图按年切换需要多年历史；聚合 SQL 按天分组数据量极小） */
@@ -147,7 +147,7 @@ export default function ActivityView() {
           </span>
 
           {/* 粒度切换：每日 / 每月 */}
-          <SegmentedControl
+          <FilterButtons
             size="sm"
             className="flex-shrink-0"
             value={granularity}
@@ -247,7 +247,7 @@ export default function ActivityView() {
                 style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
               >
                 <span className="flex items-center gap-1">
-                  <GlobeIcon size={10} />
+                  <Globe size={10} aria-hidden="true" />
                   {t('activity.globalTotal')}
                 </span>
                 <span>{t('activity.totalWritten')} {formatNumber(totalStats.writtenWords)}</span>
@@ -308,9 +308,6 @@ function StatCard({ icon, label, value, accent }: { icon: React.ReactNode; label
   )
 }
 
-function GlobeIcon({ size }: { size: number }) {
-  return <span style={{ fontSize: size }}>🌐</span>
-}
 
 /** 按天合并跨项目行（求和） */
 function mergeDaysByDay(rows: DailyActivityRow[]): DailyActivityRow[] {

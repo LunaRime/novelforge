@@ -38,12 +38,14 @@ type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.
    * Esc 仍然有效——键盘关闭是显式动作。
    */
   preventOutsideClose?: boolean
+  /** 标题栏自行放置 DialogClose 时，隐藏默认的右上角按钮。 */
+  hideCloseButton?: boolean
 }
 
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
   DialogContentProps
->(({ className, children, preventOutsideClose, onPointerDownOutside, ...props }, ref) => (
+>(({ className, children, preventOutsideClose, hideCloseButton, onPointerDownOutside, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -70,7 +72,7 @@ const DialogContent = React.forwardRef<
       {...props}
     >
       {children}
-      <DialogPrimitive.Close
+      {!hideCloseButton && <DialogPrimitive.Close
         className="absolute right-4 top-4 rounded-md opacity-60 hover:opacity-100 transition-all duration-200 hover:bg-[var(--color-hover)] p-1"
         style={{
           background: 'transparent',
@@ -81,7 +83,7 @@ const DialogContent = React.forwardRef<
       >
         <X size={16} />
         <span className="sr-only">{t('dialog.close')}</span>
-      </DialogPrimitive.Close>
+      </DialogPrimitive.Close>}
     </DialogPrimitive.Content>
   </DialogPortal>
 ))

@@ -22,6 +22,8 @@ export interface MenuItemProps {
   /** Check 之前的内容（provider 徽标、comingSoon 提示等） */
   trailing?: React.ReactNode
   className?: string
+  /** 菜单容器负责方向键时，条目以菜单项语义加入焦点序列。 */
+  menuItem?: boolean
 }
 
 export function MenuItem({
@@ -34,6 +36,7 @@ export function MenuItem({
   selected,
   trailing,
   className,
+  menuItem,
 }: MenuItemProps) {
   /* 优先级：danger > disabled > selected > 常态 */
   const color = danger
@@ -47,6 +50,9 @@ export function MenuItem({
   return (
     <button
       type="button"
+      role={menuItem ? 'menuitem' : undefined}
+      tabIndex={menuItem ? -1 : undefined}
+      aria-current={selected || undefined}
       onClick={!disabled ? onClick : undefined}
       disabled={disabled}
       className={cn(
@@ -83,12 +89,12 @@ export function MenuItem({
           {icon}
         </span>
       )}
-      <span className="flex-1">{label}</span>
+      <span className="min-w-0 flex-1 break-words">{label}</span>
       {trailing}
       {shortcut && (
         <span className="text-micro opacity-40 font-mono ml-2 flex-shrink-0">{shortcut}</span>
       )}
-      {selected && <Check size={12} className="flex-shrink-0" />}
+      {selected && <Check size={12} aria-hidden="true" className="flex-shrink-0" />}
     </button>
   )
 }

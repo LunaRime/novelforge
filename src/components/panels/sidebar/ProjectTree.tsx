@@ -1,11 +1,12 @@
+import { CreateIcon } from '../../ui/ActionIcons'
 /**
  * ProjectTree — 项目导航树（侧边栏核心视图）
  *
- * 包含：小说配置、故事架构、章节蓝图、草稿箱、正文章节、全局摘要
+ * 汇集作品设定、故事架构、蓝图、卷目录、草稿箱、正式稿和连载入口。
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe } from 'lucide-react'
+import { RefreshCw, FolderOpen, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { draftListScope, useDraftStore, type DraftsByChapter } from '../../../stores/draft-store'
@@ -21,8 +22,7 @@ import { useTranslation } from '../../../hooks/useTranslation'
 import { renderLog } from '../../../services/render-logger'
 
 import {
-  getArchFiles, renderIcon, showSidebarMenu,
-  openArchFile, openBuiltinEditor, openDraftByChapter, openDraftById,
+  showSidebarMenu, openBuiltinEditor, openDraftByChapter, openDraftById,
 } from './SidebarShared'
 import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
@@ -36,6 +36,7 @@ export default function ProjectTree() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const scope = useProjectStore(s => s.loading ? null : draftListScope(s))
+  const activeType = useEditorStore(s => s.tabs.find(tab => tab.id === s.activeTabId)?.type)
 
   // refreshFileTree / loadAllDrafts 在 refreshAll 内通过 getState() 调用
   // ✅ 只订阅「工作流状态派生 key」（步骤 status 组合）——工作流运行期间
@@ -155,119 +156,135 @@ export default function ProjectTree() {
   // 小说配置是否已完成（核心大纲非空视为已完成）
   const nc = currentProject.novelConfig
   const configDone = !!(nc.coreOutline?.trim() || nc.protagonistProfile?.trim())
+  const configStatus = t(configDone ? 'status.configured' : 'status.pendingConfig')
 
-  // 故事架构进度（翻译后的列表用于 UI 展示）
-  const archFiles = getArchFiles(t)
-
-  // 故事架构进度
-  const archDone = archFiles.filter(f => archStatus[f.key]).length
+  const architecture = Object.values(archStatus)
+  const archDone = architecture.filter(Boolean).length
 
   return (
-    <div className="text-sm space-y-3">
-      {/* 项目名 + 刷新 */}
-      <div className="flex items-center justify-between px-3 py-1.5 mb-0.5">
-        <span className="font-semibold text-xs truncate" style={{ color: 'var(--color-text)' }}>
-          {currentProject.name}
-        </span>
-        <Button variant="ghost" size="icon" onClick={() => refreshAll()} title={t('action.refresh')}>
-          <RefreshCw size={12} />
+    <div className="nf-project-tree">
+      {/* 写作入口随卷目录滚动，窗口标题保留作品名。 */}
+      <div className="nf-project-actions">
+        <Button type="button" variant="outline" className="min-h-8 min-w-0 flex-1 justify-start"
+          onClick={() => useLayoutStore.getState().openChapterCreation()} title={t('chapter.newChapter')}>
+          <CreateIcon size={15} />
+          <span className="truncate">{t('chapter.newChapter')}</span>
+        </Button>
+        <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => void refreshAll()}
+          title={t('action.refresh')} aria-label={t('action.refresh')}>
+          <RefreshCw size={14} aria-hidden="true" />
         </Button>
       </div>
 
-      {/* 1. 小说配置（单行入口块：标题行点击打开配置编辑器） */}
-      <SidebarGroup
-        icon={<BookOpen size={12} />}
-        title={t('editor.novelConfig')}
-        collapsible={false}
-        count={<CountBadge value={configDone ? t('status.configured') : t('status.pendingConfig')} tone={configDone ? 'success' : 'muted'} />}
-        onTitleClick={() => {
-          const state = useEditorStore.getState()
-          const configTab = state.tabs.find(t => t.type === 'config')
-          if (configTab) {
-            state.setActiveTab(configTab.id)
-          } else {
-            state.openFile({ id: 'config', name: t('editor.novelConfig'), type: 'config' })
-          }
-        }}
-        onContextMenu={e => showSidebarMenu([
-          {
-            key: 'open',
-            label: t('action.openConfig'),
-            icon: <FolderOpen size={13} />,
-            onClick: () => {
-              const state = useEditorStore.getState()
-              const configTab = state.tabs.find(t => t.type === 'config')
-              if (configTab) state.setActiveTab(configTab.id)
-              else state.openFile({ id: 'config', name: t('editor.novelConfig'), type: 'config' })
+      {/* 设定类页面在同一组，当前编辑区的页面随标签切换高亮。 */}
+      <div className="nf-project-reference">
+        <SidebarGroup
+          icon={<BookOpen size={12} />}
+          title={t('editor.novelConfig')}
+          current={activeType === 'config'}
+          collapsible={false}
+          titleHint={`${t('editor.novelConfig')}\n${configStatus}`}
+          count={<CountBadge className="nf-project-secondary" value={configStatus} tone={configDone ? 'success' : 'muted'} />}
+          onTitleClick={() => {
+            const state = useEditorStore.getState()
+            const configTab = state.tabs.find(t => t.type === 'config')
+            if (configTab) {
+              state.setActiveTab(configTab.id)
+            } else {
+              state.openFile({ id: 'config', name: t('editor.novelConfig'), type: 'config' })
+            }
+          }}
+          onContextMenu={e => showSidebarMenu([
+            {
+              key: 'open',
+              label: t('action.openConfig'),
+              icon: <FolderOpen size={13} />,
+              onClick: () => {
+                const state = useEditorStore.getState()
+                const configTab = state.tabs.find(t => t.type === 'config')
+                if (configTab) state.setActiveTab(configTab.id)
+                else state.openFile({ id: 'config', name: t('editor.novelConfig'), type: 'config' })
+              },
             },
-          },
-        ], e)}
-      />
+          ], e)}
+        />
 
-      {/* 2. 故事架构 — 点击标题行打开编辑器，子文件仍可单独点开 */}
-      <WorldBuildingGroup archStatus={archStatus} archDone={archDone} archFiles={archFiles} />
+        <SidebarGroup
+          icon={<FolderTree size={12} />}
+          title={t('editor.storyArch')}
+          current={activeType === 'world-building'}
+          collapsible={false}
+          count={architecture.length > 0 && <CountBadge value={archDone} total={architecture.length} progress
+            tone={archDone === architecture.length ? 'success' : archDone > 0 ? 'warning' : 'muted'} />}
+          onTitleClick={() => openBuiltinEditor('world-building-editor', t('editor.storyArch'), 'world-building')}
+          titleHint={t('tip.openArchEditor')}
+        />
 
-      {/* 世界观与时间线 — 独立单行入口（不再与「故事架构」共用一张卡的两个热区） */}
-      <SidebarGroup
-        icon={<Globe size={12} />}
-        title={t('world.title')}
-        collapsible={false}
-        count={(
-          <span className="flex items-center gap-1">
-            <CountBadge value={worldCounts.entities} unit={t('unit.entities')} />
-            <CountBadge value={worldCounts.events} unit={t('unit.events')} />
-          </span>
-        )}
-        onTitleClick={() => {
-          const state = useEditorStore.getState()
-          const existing = state.tabs.find(tab => tab.type === 'world-timeline')
-          if (existing) state.setActiveTab(existing.id)
-          else state.openFile({ id: 'world-timeline', name: t('world.title'), type: 'world-timeline' })
-        }}
-      />
+        {/* 世界观与时间线共享一个页面入口。 */}
+        <SidebarGroup
+          icon={<Globe size={12} />}
+          title={t('world.title')}
+          current={activeType === 'world-timeline'}
+          collapsible={false}
+          count={(
+            <span className="nf-project-secondary flex items-center gap-1">
+              <CountBadge value={worldCounts.entities} unit={t('unit.entities')} />
+              <CountBadge value={worldCounts.events} unit={t('unit.events')} />
+            </span>
+          )}
+          onTitleClick={() => {
+            const state = useEditorStore.getState()
+            const existing = state.tabs.find(tab => tab.type === 'world-timeline')
+            if (existing) state.setActiveTab(existing.id)
+            else state.openFile({ id: 'world-timeline', name: t('world.title'), type: 'world-timeline' })
+          }}
+        />
 
-      {/* 3. 章节蓝图（单行入口块：标题行点击打开编辑器页） */}
-      <SidebarGroup
-        icon={<LayoutList size={12} />}
-        title={t('mention.blueprint')}
-        collapsible={false}
-        count={blueprintCount > 0
-          ? <CountBadge
-              value={blueprintCount}
-              total={nc.totalChapters > 0 ? nc.totalChapters : undefined}
-              unit={t('unit.chapters')}
-              progress={nc.totalChapters > 0}
-              tone={blueprintCount >= nc.totalChapters ? 'success' : 'warning'}
-            />
-          : <CountBadge value={t('status.pendingGen')} />}
-        onTitleClick={() => openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card')}
-        actions={(
-          <button
-            type="button"
-            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-            style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
-            title={t('board.title')}
-            onClick={() => {
-              const state = useEditorStore.getState()
-              const existing = state.tabs.find((tab) => tab.type === 'manuscript-board')
-              if (existing) state.setActiveTab(existing.id)
-              else state.openFile({ id: 'manuscript-board', name: t('board.title'), type: 'manuscript-board' })
-            }}
-          >
-            <LayoutGrid size={12} />
-          </button>
-        )}
-        onContextMenu={e => showSidebarMenu([
-          {
-            key: 'open',
-            label: t('action.openBlueprint'),
-            icon: <FolderOpen size={13} />,
-            onClick: () => openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card'),
-          },
-        ], e)}
-      />
+        {/* 看板和蓝图各有独立操作区。 */}
+        <SidebarGroup
+          icon={<LayoutList size={12} />}
+          title={t('mention.blueprint')}
+          current={activeType === 'chapter-card'}
+          collapsible={false}
+          count={blueprintCount > 0
+            ? <CountBadge
+                value={blueprintCount}
+                total={nc.totalChapters > 0 ? nc.totalChapters : undefined}
+                unit={t('unit.chapters')}
+                progress={nc.totalChapters > 0}
+                tone={blueprintCount >= nc.totalChapters ? 'success' : 'warning'}
+              />
+            : <CountBadge value={t('status.pendingGen')} />}
+          onTitleClick={() => openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card')}
+          actions={(
+            <button
+              type="button"
+              className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+              style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
+              title={t('board.title')}
+              aria-label={t('board.title')}
+              onClick={() => {
+                const state = useEditorStore.getState()
+                const existing = state.tabs.find((tab) => tab.type === 'manuscript-board')
+                if (existing) state.setActiveTab(existing.id)
+                else state.openFile({ id: 'manuscript-board', name: t('board.title'), type: 'manuscript-board' })
+              }}
+            >
+              <LayoutGrid size={12} />
+            </button>
+          )}
+          onContextMenu={e => showSidebarMenu([
+            {
+              key: 'open',
+              label: t('action.openBlueprint'),
+              icon: <FolderOpen size={13} />,
+              onClick: () => openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card'),
+            },
+          ], e)}
+        />
+      </div>
 
-      {/* 3.5 分卷 — 按卷组织章节（可新建/编辑/删除/自动划分；卷内章节直接打开草稿） */}
+      {/* 目录直接打开卷中的草稿。已有草稿优先按稿件 ID 定位。 */}
       <BinderVolumeGroup
         projectPath={p}
         totalChapters={nc.totalChapters}
@@ -288,116 +305,6 @@ export default function ProjectTree() {
 
       {/* 5. 正文章节 — 仅显示已定稿 */}
       <ManuscriptGroup files={manuscriptFiles} projectPath={p} />
-    </div>
-  )
-}
-
-
-// ===== 故事架构折叠组 =====
-
-function WorldBuildingGroup({
-  archStatus,
-  archDone,
-  archFiles,
-}: {
-  archStatus: Record<string, boolean>
-  archDone: number
-  archFiles: Array<{ key: string; fileName: string; label: string; iconName: string; desc: string }>
-}) {
-  const { t } = useTranslation()
-
-  const allDone = archDone === archFiles.length
-
-  return (
-    <SidebarGroup
-      icon={<FolderTree size={12} />}
-      title={t('editor.storyArch')}
-      defaultOpen={false}
-      count={<CountBadge
-        value={archDone}
-        total={archFiles.length}
-        progress
-        tone={allDone ? 'success' : archDone > 0 ? 'warning' : 'muted'}
-      />}
-      onTitleClick={() => openBuiltinEditor('world-building-editor', t('editor.storyArch'), 'world-building')}
-      titleHint={t('tip.openArchEditor')}
-    >
-      {/* 子文件列表（点击直接在 Markdown 编辑器打开） */}
-      <div className="mt-1">
-        {archFiles.map(f => {
-          const isGenerated = archStatus[f.key]
-          const filePath = `vela://core/${f.key}`
-          return (
-            <ArchFileRow
-              key={f.key}
-              f={f}
-              filePath={filePath}
-              isGenerated={isGenerated}
-            />
-          )
-        })}
-      </div>
-    </SidebarGroup>
-  )
-}
-
-/** 单个架构文件行 */
-function ArchFileRow({
-  f,
-  filePath,
-  isGenerated,
-}: {
-  f: { key: string; iconName: string; label: string; desc: string }
-  filePath: string
-  isGenerated: boolean
-}) {
-  const { t } = useTranslation()
-  return (
-    <div
-      className="tree-item gap-1.5 select-none"
-      // 左缩进交给主按钮：手型光标与真实可点区重合，缩进区仍可点；右侧留 8px 防贴边
-      style={{ paddingLeft: 0, paddingRight: 8 }}
-      onContextMenu={e => showSidebarMenu([
-        {
-          key: 'open',
-          label: t('action.openFile'),
-          icon: <FolderOpen size={13} />,
-          onClick: () => openArchFile(filePath, `${f.label}`),
-        },
-        { key: 'div1', type: 'divider' as const },
-        {
-          key: 'copy-path',
-          label: t('action.copyPath'),
-          icon: <Copy size={13} />,
-          onClick: () => navigator.clipboard.writeText(filePath).catch(() => { }),
-        },
-      ], e)}
-      title={f.desc}
-    >
-      {/* 2026-09-25：行的点击移到内层按钮 —— 键盘可达，且行内不再需要 stopPropagation */}
-      <button
-        type="button"
-        onClick={() => openArchFile(filePath, `${f.label}`)}
-        className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left cursor-pointer"
-        style={{ paddingLeft: 26 }}
-      >
-      {isGenerated
-        ? <CheckCircle2 size={10} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
-        : <Circle size={6} style={{ flexShrink: 0, fill: 'transparent', stroke: 'var(--color-text-muted)' }} />
-      }
-      <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{renderIcon(f.iconName, 13)}</span>
-      <span
-        className="text-sm flex-1 truncate"
-        style={{ color: isGenerated ? 'var(--color-text)' : 'var(--color-text-secondary)' }}
-      >
-        {f.label}
-      </span>
-      {!isGenerated && (
-        <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-          {t('status.pendingGen')}
-        </span>
-      )}
-      </button>
     </div>
   )
 }

@@ -1,20 +1,26 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language'
+import { tags } from '@lezer/highlight'
 import { languages } from '@codemirror/language-data'
-import { EditorState, Transaction } from '@codemirror/state'
+import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { history, historyKeymap, undo, redo } from '@codemirror/commands'
-import { Sparkles, Bold, Undo2, Redo2, Share2 } from 'lucide-react'
+import { Sparkles, Bold, Underline, Undo2, Redo2, Share2 } from 'lucide-react'
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import { t as tStatic } from '../../shared/locale'
+import { markdownUnderlineSpans, toggleMarkdownUnderline, UNDERLINE_CLOSE, UNDERLINE_OPEN } from '../../shared/markdown-underline'
 import { computeTextStats } from '../../services/text-stats'
 import { buildSelectionSession } from '../../services/diff/selection-session'
 import { extractPreferencePair, recordPreference } from '../../services/preferences'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
+import { draftListScope } from '../../stores/draft-store'
 import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { formatBinding, matchesBinding, shortcutBinding, toCodeMirrorKey, useShortcutStore } from '../../stores/shortcut-store'
@@ -30,10 +36,39 @@ import {
   setHunkRanges,
 } from './codemirror-inline-accept'
 import { countUndecided, type SubHunk } from '../../services/diff/hunk-model'
+import MarkdownFormatMenu from '../ui/MarkdownFormatMenu'
+import { markdownFormatChange, type MarkdownFormat } from '../ui/markdown-format'
+import ManuscriptTextTools, { useManuscriptSearchTarget } from './ManuscriptTextTools'
 import { InlineAcceptBar } from './InlineAcceptBar'
 import { InlineAcceptPopover } from './InlineAcceptPopover'
 import './inline-accept.css'
 import './novel-editor.css'
+
+
+const underlineMark = Decoration.mark({ class: 'cm-manuscript-underline' })
+
+function underlineDecorations(view: EditorView): DecorationSet {
+  const spans = markdownUnderlineSpans(view.state.doc.toString(), syntaxTree(view.state))
+  return Decoration.set(spans.flatMap(({ from, to }) => {
+    const start = from + UNDERLINE_OPEN.length
+    const end = to - UNDERLINE_CLOSE.length
+    return start < end && end > view.viewport.from && start < view.viewport.to ? [underlineMark.range(start, end)] : []
+  }))
+}
+
+const underlinePreview = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = underlineDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+      this.decorations = underlineDecorations(update.view)
+    }
+  }
+}, { decorations: plugin => plugin.decorations })
 
 /**
  * 正文段落的视觉扩展（规范：段间距 1em / 当前段落高亮 / 专注模式压暗其它段）。
@@ -104,25 +139,26 @@ function paragraphVisuals(highlight: boolean) {
  * 打字机滚动：输入/移动光标后把光标所在行拉到视口垂直 40%。
  *
  * 只在编辑器已有焦点时执行——初次挂载、鼠标滚轮浏览时不应被强行拉回。
- * 选区内拖动（非折叠）同样按光标头定位，符合「光标保持 40%」的规范。
+ * 鼠标选区变化交给 CodeMirror 的边缘滚动，保持指针与文本的相对位置。
  */
 function typewriterScroll() {
   return ViewPlugin.fromClass(class {
     private frame = 0
-    constructor(view: EditorView) {
-      this.schedule(view)
-    }
     update(update: ViewUpdate) {
-      if (update.selectionSet || update.docChanged) this.schedule(update.view)
+      if (!update.selectionSet && !update.docChanged) return
+      if (this.frame) cancelAnimationFrame(this.frame)
+      this.frame = 0
+      if (update.transactions.some(transaction => transaction.isUserEvent('select.pointer'))) return
+      this.schedule(update.view)
     }
     destroy() {
       if (this.frame) cancelAnimationFrame(this.frame)
     }
     private schedule(view: EditorView) {
-      if (!view.hasFocus || view.composing) return
-      if (this.frame) cancelAnimationFrame(this.frame)
+      if (!view.hasFocus || view.composing || !view.state.selection.main.empty) return
       this.frame = requestAnimationFrame(() => {
         this.frame = 0
+        if (!view.hasFocus || view.composing || !view.state.selection.main.empty) return
         const head = view.state.selection.main.head
         const coords = view.coordsAtPos(head)
         if (!coords) return
@@ -165,6 +201,18 @@ function stripThinkStream(chunk: string, state: { inThink: boolean }): string {
   return out
 }
 
+// 语法颜色与预览共用主题语义，普通正文保留墨色。
+const markdownHighlight = syntaxHighlighting(HighlightStyle.define([
+  { tag: tags.heading, class: 'nf-md-heading' },
+  { tag: tags.strong, class: 'nf-md-strong' },
+  { tag: tags.emphasis, class: 'nf-md-emphasis' },
+  { tag: tags.strikethrough, class: 'nf-md-strike' },
+  { tag: [tags.link, tags.url], class: 'nf-md-link' },
+  { tag: tags.quote, class: 'nf-md-quote' },
+  { tag: tags.monospace, class: 'nf-md-code' },
+  { tag: [tags.processingInstruction, tags.list], class: 'nf-md-marker' },
+]))
+
 export type CodeMirrorEditorProps = {
   content: string
   tabId?: string
@@ -172,6 +220,9 @@ export type CodeMirrorEditorProps = {
   editable?: boolean
   onChange?: (content: string) => void
   onSave?: (content: string) => Promise<void> | void
+  textToolsHost?: HTMLElement | null
+  markdownToolsHost?: HTMLElement | null
+  onSaveUnderline?: (before: string, after: string) => Promise<boolean>
   onCharCountChange?: (count: number) => void
   placeholder?: string
   hideStatusBar?: boolean
@@ -309,6 +360,9 @@ export default function CodeMirrorEditor({
   editable = true,
   onChange,
   onSave,
+  onSaveUnderline,
+  textToolsHost,
+  markdownToolsHost,
   onCharCountChange,
   mode = 'document',
   paperHeading,
@@ -359,6 +413,24 @@ export default function CodeMirrorEditor({
   // 首帧 effect 里 editorRef.current?.view 尚不存在 → 用 onCreateEditor 锁存实例触发重渲染，
   // 使会话区间同步 effect 在 view 就绪后必然执行（含「带会话重挂载」路径，R5）
   const [cmView, setCmView] = useState<EditorView | null>(null)
+  const searchTarget = useManuscriptSearchTarget(s => s.target?.path === filePath ? s.target : null)
+  useEffect(() => {
+    if (!cmView || !searchTarget) return
+    const frame = requestAnimationFrame(() => {
+      if (useManuscriptSearchTarget.getState().target !== searchTarget) return
+      if (draftListScope(useProjectStore.getState()) !== searchTarget.scope) {
+        useManuscriptSearchTarget.setState({ target: null })
+        return
+      }
+      const text = cmView.state.doc.toString()
+      const { query, start } = searchTarget
+      const from = text.slice(start, start + query.length) === query ? start : text.indexOf(query)
+      if (from >= 0) cmView.dispatch({ selection: { anchor: from, head: from + query.length }, scrollIntoView: true })
+      useManuscriptSearchTarget.setState({ target: null })
+      cmView.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [cmView, searchTarget])
   // 事件处理器经 ref 取 view（渲染期不访问 ref；cmView state 只作 effect 触发器）
   const cmViewRef = useRef<EditorView | null>(null)
   useEffect(() => { cmViewRef.current = cmView }, [cmView])
@@ -567,6 +639,47 @@ export default function CodeMirrorEditor({
   const [aiGenerating, setAiGenerating] = useState(false)
   const [loadingDots, setLoadingDots] = useState('.')
   const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
+  const [savingUnderline, setSavingUnderline] = useState(false)
+  const canUnderline = editable || (mode === 'prose' && !!onSaveUnderline)
+
+  const formatMarkdown = (format: MarkdownFormat) => {
+    const view = editorRef.current?.view
+    if (!view || view.state.readOnly) return
+    const { from, to } = view.state.selection.main
+    const { anchor, head, ...changes } = markdownFormatChange(view.state.doc.toString(), from, to, format)
+    view.dispatch({ changes, selection: { anchor, head }, userEvent: 'input.format' })
+    view.focus()
+  }
+
+  const handleUnderline = async () => {
+    const view = editorRef.current?.view
+    if (!view || !canUnderline || savingUnderline) return
+    const selected = view.state.selection.main
+    const document = view.state.doc
+    const source = document.toString()
+    const markers = toggleMarkdownUnderline(source, selected.from, selected.to)
+    if (markers.length === 0) return
+
+    const changes = view.state.changes(markers)
+    const start = changes.mapPos(selected.from, 1)
+    const end = changes.mapPos(selected.to, -1)
+    const selection = selected.anchor <= selected.head ? EditorSelection.single(start, end) : EditorSelection.single(end, start)
+    if (!editable && onSaveUnderline) {
+      setSavingUnderline(true)
+      try {
+        const saved = await onSaveUnderline(source, changes.apply(document).toString())
+        if (saved && editorRef.current?.view === view && view.state.doc === document) {
+          view.dispatch({ changes, selection: view.state.selection.main.eq(selected) ? selection : undefined,
+            annotations: Transaction.addToHistory.of(false) })
+        }
+      } finally {
+        setSavingUnderline(false)
+      }
+      return
+    }
+
+    view.dispatch({ changes, selection })
+  }
   // 偏好记忆：AI 接受快照（检测用户后续手动修改 → 记录替换对）
   const aiAcceptedRef = useRef<{ aiText: string } | null>(null)
 
@@ -655,13 +768,13 @@ export default function CodeMirrorEditor({
       } else {
         setSelectionRange({ from: sel.from, to: sel.to })
         // 交由下方的 useEffect 进行精准防越界座标计算与位置同步
-        // 只读（已定稿/归档/章节忙）不得弹出 AI 气泡：readOnly 只挡键盘，挡不住这里
-        if (!aiResult && editable) {
+        // 正式稿的工具栏只提供下划线。归档稿与工作流占用的草稿没有编辑动作。
+        if (!aiResult && (editable || canUnderline)) {
           setBubbleOpen(true)
         }
       }
     }
-  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange, t, editable])
+  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange, t, editable, canUnderline])
 
   // Bubble Menu：Escape 关闭（原 InlineAIToolbar 的键盘关闭特性）
   useEffect(() => {
@@ -684,36 +797,35 @@ export default function CodeMirrorEditor({
 
     const updatePosition = () => {
       const sel = window.getSelection()
-      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed || !view.contentDOM.contains(sel.anchorNode) ||
+          !view.contentDOM.contains(sel.focusNode)) {
         const coords = view.coordsAtPos(selectionRange.from)
         if (coords) {
-          setBubblePos({ top: coords.top, left: coords.left })
+          setBubblePos({ top: Math.max(60, coords.top - 8), left: coords.left })
         } else {
           setBubbleOpen(false)
         }
         return
       }
 
-      const range = sel.getRangeAt(0)
-      const rect = range.getBoundingClientRect()
+      const rect = sel.getRangeAt(0).getBoundingClientRect()
+      if (rect.width === 0) {
+        const coords = view.coordsAtPos(selectionRange.from)
+        if (coords) setBubblePos({ top: Math.max(60, coords.top - 8), left: coords.left })
+        else setBubbleOpen(false)
+        return
+      }
       const viewRect = scrollDOM.getBoundingClientRect()
 
       // 判断选区是否整体完全在视口之外
-      if (rect.bottom < viewRect.top || rect.top > viewRect.bottom || rect.width === 0) {
+      if (rect.bottom < viewRect.top || rect.top > viewRect.bottom) {
         setBubbleOpen(false)
         return
       }
 
-      let top = rect.top - 5 // 与选区顶部有些许间距
-      const left = rect.left + rect.width / 2
-
-      // 当用户圈选了一大段并向下滚动时，如果选区顶部滚出了视区，
-      // 我们让气泡悬浮在视区顶部边缘，直到选区底部也完全滚出视区。
-      if (top < viewRect.top + 45) {
-        top = Math.min(viewRect.top + 45, rect.bottom - 10)
-      }
-
-      setBubblePos({ top, left })
+      // 气泡的底边留在选区上方。长选区卷出视口后锚定稿纸首行上沿。
+      const top = Math.max(60, Math.max(rect.top, viewRect.top) - 8)
+      setBubblePos({ top, left: rect.left + rect.width / 2 })
     }
 
     const onScrollOrResize = () => {
@@ -753,22 +865,23 @@ export default function CodeMirrorEditor({
     },
     ".cm-content": {
       width: "100%",
-      // 规范：正文栏宽 720–800px，居中；默认 760px（两侧留呼吸，又不至于像移动端）
+      // 作者设置给出内容栏宽上限，窄窗口继续按可用宽度排版。
       maxWidth: 'var(--prose-measure)',
       margin: "0 auto",
-      padding: mode === 'prose' ? '24px var(--prose-inset) 100px' : "40px",
+      padding: mode === 'prose' ? 'var(--prose-body-start) var(--prose-inset) 100px' : "40px",
       backgroundColor: mode === 'prose' ? 'var(--color-editor-bg)' : 'transparent',
       minHeight: mode === 'prose' ? '100%' : 'auto',
       boxSizing: 'border-box',
       lineHeight: "1.8",
       color: "var(--color-text)",
+      caretColor: "var(--color-accent)",
       // 段间距 1em（由段落末行 decoration 实现，不影响段内折行）
       fontSize: "inherit",
     },
     "&.cm-focused": { outline: "none" },
-    ".cm-cursor": { borderLeftColor: "var(--color-accent)", borderLeftWidth: "2px" },
     ".cm-activeLine": { backgroundColor: "transparent" },
-    ".cm-selectionBackground, .cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-editor-selection, var(--color-hover)) !important" },
+    // 原生选区沿文字绘制，在折行时保留稿纸两侧的留白。
+    ".cm-content::selection, .cm-content ::selection": { backgroundColor: "var(--color-editor-selection)" },
     ".cm-line": { padding: "0", transition: "opacity 140ms ease, background-color 140ms ease" },
     ".cm-line.cm-paragraph-end": { paddingBottom: "1em" },
     ".cm-line.cm-focus-paragraph": {
@@ -778,11 +891,6 @@ export default function CodeMirrorEditor({
     // 专注模式：当前段保持全亮，其余段压暗（iA Writer 的「只看见这一段」）
     "&.cm-focus-writing .cm-line": { opacity: "0.52" },
     "&.cm-focus-writing .cm-line.cm-focus-paragraph": { opacity: "1" },
-    // 防御性兜底（非渲染来源）：当前依赖下 `**文字**`/`*文字*` 的粗体/斜体渲染由
-    // defaultHighlightStyle（basicSetup 的 syntaxHighlighting）提供的散列类名实现，
-    // .cm-strong/.cm-em 并不匹配任何实际 DOM 类；保留以防未来替换高亮主题后丢失
-    ".cm-strong": { fontWeight: "bold" },
-    ".cm-em": { fontStyle: "italic" },
   }), [mode])
 
   // 构建扩展
@@ -816,35 +924,26 @@ export default function CodeMirrorEditor({
           }
         }
       ]),
-      // 汉化 Search / UI 文本（涵盖官方大小写所有变种）
+      // 键使用 CodeMirror 查找面板的原始短语，显示文本走应用字典。
       EditorState.phrases.of({
-        "Find": "Find",
-        "find": "Find",
-        "Replace": "Replace",
-        "replace": "Replace",
-        "Replace all": "Replace All",
-        "replace all": "Replace All",
-        "Next": "Next",
-        "next": "Next",
-        "Previous": "Previous",
-        "previous": "Previous",
-        "All": "All",
-        "all": "All",
-        "Match case": "Match Case",
-        "match case": "Match Case",
-        "Regexp": "Regexp",
-        "regexp": "Regexp",
-        "by word": "By Word",
-        "By word": "By Word",
-        "Close": "Close",
-        "close": "Close"
+        Find: t('search.find'),
+        Replace: t('search.replace'),
+        replace: t('search.replace'),
+        'replace all': t('search.replaceAll'),
+        next: t('search.next'),
+        previous: t('search.previous'),
+        all: t('search.selectAll'),
+        'match case': t('search.matchCase'),
+        regexp: t('search.regex'),
+        'by word': t('search.wholeWord'),
+        close: t('search.close'),
       })
     ]
     // L1 inline 接受（Task 4）：StateField 常驻但无会话时空值零可见影响（R3）；
     // 会话期由 setHunkRanges effect 动态驱动，无需 reconfigure
     exts.push(...inlineAcceptExtensions())
     if (mode === 'document' || mode === 'prose') {
-      exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }))
+      exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }), markdownHighlight, underlinePreview)
     }
     // 正文排版扩展只在 prose 生效：文档/架构编辑器保持紧凑，不抢文字工作区的视觉节奏
     if (mode === 'prose') {
@@ -855,7 +954,9 @@ export default function CodeMirrorEditor({
       if (focusParagraph) exts.push(EditorView.editorAttributes.of({ class: 'cm-focus-writing' }))
     }
     return exts
-  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings])
+    // t 的引用保持稳定，语言切换时仍需更新 CodeMirror 短语。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings, t, locale, editable])
 
   // AI 菜单处理（流式调用，实时显示生成内容）
   const handleAIAction = async (prompt: string, _actionKey: string) => {
@@ -1037,6 +1138,8 @@ export default function CodeMirrorEditor({
     foldGutter: false,
     dropCursor: false,
     allowMultipleSelections: false,
+    drawSelection: false,
+    highlightSelectionMatches: false,
     indentOnInput: false,
     highlightActiveLine: false,
     highlightActiveLineGutter: false,
@@ -1068,13 +1171,7 @@ export default function CodeMirrorEditor({
           }
         }
       }}
-      onKeyDown={(e) => {
-        // 捕获保存快捷键
-        if (matchesBinding(e.nativeEvent, shortcutBinding('save', shortcutBindings))) {
-          e.preventDefault()
-          onSave?.(lastEmittedContentRef.current)
-        }
-      }}
+      onKeyDown={onSave ? event => handleSaveShortcut(event, () => onSave(lastEmittedContentRef.current), editable) : undefined}
       onClick={(e) => {
         // L1 inline（Task 4）：仅 CM 正文点击驱动 pending 段点击 → 打开/切换接受浮层
         // （浮条/浮层/气泡按钮的点击不落在 .cm-content 内，不触发）
@@ -1083,6 +1180,8 @@ export default function CodeMirrorEditor({
           handleDocClick()
         }
       }}>
+      {markdownToolsHost && editable && createPortal(<MarkdownFormatMenu onFormat={formatMarkdown} />, markdownToolsHost)}
+      {textToolsHost && cmView && createPortal(<ManuscriptTextTools key={filePath} view={cmView} />, textToolsHost)}
       {mode === 'prose' && paperHeading && (
         <div className="nf-prose-heading-gutter">
           <header className="nf-prose-heading">{paperHeading}</header>
@@ -1099,7 +1198,7 @@ export default function CodeMirrorEditor({
             ref={editorRef}
             value={editorContent}
             height="100%"
-            className="h-full"
+            className="h-full allow-select"
             theme={cmTheme}
             extensions={extensions}
             readOnly={!editable}
@@ -1215,7 +1314,7 @@ export default function CodeMirrorEditor({
                   <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
                 </>
               )}
-              {(mode === 'document' || mode === 'prose') && (
+              {editable && (
                 <>
                   <button
                     className="p-1 rounded"
@@ -1224,52 +1323,51 @@ export default function CodeMirrorEditor({
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    onClick={() => {
-                      const view = editorRef.current?.view
-                      if (!view) return
-                      // 只读（已定稿/归档）时不可加粗——CM readOnly 只拦键盘输入，
-                      // 拦不住程序化 dispatch，此处须自行尊重 editable（QA 修复 B）
-                      if (!editable) return
-                      // 用当前光标选区而非 selectionRange（后者是 AI 气泡的旧选区，
-                      // 光标移位后会错位加粗旧段——QA 修复 B）；无选区则 no-op
-                      const sel = view.state.selection.main
-                      if (sel.empty) return
-                      const text = view.state.sliceDoc(sel.from, sel.to)
-                      if (!text) return
-                      view.dispatch({
-                        changes: { from: sel.from, to: sel.to, insert: `**${text}**` }
-                      })
-                    }}
+                    onClick={() => formatMarkdown('bold')}
                   ><Bold size={14} /></button>
-                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
                 </>
               )}
-              <div
-                className="flex items-center gap-0.5 pl-0.5 pr-1 text-2xs"
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                <Sparkles size={11} />AI
-              </div>
-              {aiActions.map(action => (
-                <button
-                  key={action.key}
-                  className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                  onClick={() => handleAIAction(action.prompt, action.key)}
-                >
-                  <span className="text-2xs">{action.label}</span>
-                </button>
-              ))}
-              <button
-                className="p-1.5 rounded transition-colors"
-                title={t('shareCard.generate')}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                onClick={handleShareCard}
-              >
-                <Share2 size={13} style={{ color: 'var(--color-text-muted)' }} />
-              </button>
+              {editable && <MarkdownFormatMenu compact onFormat={formatMarkdown} />}
+              {canUnderline && (
+                <button type="button"
+                  className="grid size-8 place-items-center rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] disabled:opacity-50 pointer-coarse:size-11"
+                  aria-label={t('editor.underline')}
+                  data-tooltip={t('editor.underline')}
+                  disabled={savingUnderline}
+                  onClick={() => void handleUnderline()}
+                ><Underline size={14} aria-hidden="true" /></button>
+              )}
+              {editable && (
+                <>
+                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
+                  <div
+                    className="flex items-center gap-0.5 pl-0.5 pr-1 text-2xs"
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    <Sparkles size={11} />AI
+                  </div>
+                  {aiActions.map(action => (
+                    <button
+                      key={action.key}
+                      className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      onClick={() => handleAIAction(action.prompt, action.key)}
+                    >
+                      <span className="text-2xs">{action.label}</span>
+                    </button>
+                  ))}
+                  <button
+                    className="p-1.5 rounded transition-colors"
+                    title={t('shareCard.generate')}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onClick={handleShareCard}
+                  >
+                    <Share2 size={13} style={{ color: 'var(--color-text-muted)' }} />
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>

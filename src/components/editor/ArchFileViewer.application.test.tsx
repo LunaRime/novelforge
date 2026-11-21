@@ -65,22 +65,22 @@ afterEach(async () => { if (root) await flush(() => root.unmount()); host?.remov
 describe('architecture document edit session', () => {
   it('saving an old snapshot preserves newer edits and the dirty tab', async () => {
     const pending = deferred<{ success: boolean }>(); h.invoke.mockReturnValueOnce(pending.promise)
-    await mount(); await edit('saved snapshot'); await click('arch.save'); await edit('new input')
+    await mount(); await edit('saved snapshot'); await click('tip.saveShortcut'); await edit('new input')
     await flush(() => pending.resolve({ success: true }))
     expect(host.querySelector('[title="arch.unsavedChanges"]')).not.toBeNull()
     expect(h.saved).not.toHaveBeenCalled(); expect(h.update).toHaveBeenLastCalledWith(locator, 'new input')
-    await click('arch.save'); expect(h.invoke).toHaveBeenLastCalledWith('db:project-core-update', { worldbuilding: 'new input' })
+    await click('tip.saveShortcut'); expect(h.invoke).toHaveBeenLastCalledWith('db:project-core-update', { worldbuilding: 'new input' })
   })
   it.each(['false', 'reject'])('failed write %s keeps dirty and reports failure', async mode => {
     if (mode === 'false') h.invoke.mockResolvedValueOnce({ success: false })
     else h.invoke.mockRejectedValueOnce(new Error('disk failure'))
-    await mount(); await edit('unsaved'); await click('arch.save')
+    await mount(); await edit('unsaved'); await click('tip.saveShortcut')
     expect(host.querySelector('[title="arch.unsavedChanges"]')).not.toBeNull()
     expect(h.error).toHaveBeenCalledOnce(); expect(h.success).not.toHaveBeenCalled(); expect(h.saved).not.toHaveBeenCalled()
   })
   it('same-path reopen prevents an old save from marking the new tab saved', async () => {
     const pending = deferred<{ success: boolean }>(); h.invoke.mockReturnValueOnce(pending.promise)
-    await mount(); await edit('old edit'); await click('arch.save')
+    await mount(); await edit('old edit'); await click('tip.saveShortcut')
     await flush(() => useProjectStore.setState({ projectSession: 2 }))
     await flush(() => pending.resolve({ success: true }))
     expect(h.saved).not.toHaveBeenCalled(); expect(h.success).not.toHaveBeenCalled(); expect(h.error).not.toHaveBeenCalled()
@@ -100,7 +100,7 @@ describe('architecture document edit session', () => {
   })
   it('saving supersedes a pending reload without leaving the reload button stuck', async () => {
     const pending = deferred<{ worldbuilding: string }>(); h.invoke.mockReturnValueOnce(pending.promise)
-    await mount(); await click('arch.reloadFromDisk'); await edit('newer'); await click('arch.save')
+    await mount(); await click('arch.reloadFromDisk'); await edit('newer'); await click('tip.saveShortcut')
     await flush(() => pending.resolve({ worldbuilding: 'obsolete disk' }))
     expect(host.querySelector<HTMLButtonElement>('[title="arch.reloadFromDisk"]')?.disabled).toBe(false)
     expect(h.editor.content).not.toBe('obsolete disk')

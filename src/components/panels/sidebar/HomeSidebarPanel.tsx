@@ -1,9 +1,6 @@
 /**
- * HomeSidebarPanel — 主页侧边栏：项目管理入口 + 当前项目信息 + 最近项目
- *
- * 历史项目方块列表已提升为 Sidebar 直接子级（常驻底部），不在此渲染。
- * 2026-09-28：欢迎页的「最近项目」列表迁入本视图（行片形态，过滤当前项目）；
- * 按钮列在「打开项目」下方新增「导入小说」入口（= 既有 ImportNovelDialog）。
+ * 主页侧栏负责项目管理和完整的最近项目列表。
+ * 非主页视图由左侧导航轨道提供快速切换。
  */
 
 import { BookOpen, Clock, Trash2 } from 'lucide-react'
@@ -89,8 +86,7 @@ export default function HomeSidebarPanel() {
           {t('welcome.importNovel')}</Button>
       </div>
 
-      {/* 最近项目（2026-09-28 自欢迎页迁入）——行片形态（MenuRow 为唯一实现）；
-          行间距由片自带的 `margin: 2px 4px` 承担（spec 片间距 2px），容器不得再加 space-y-* */}
+      {/* 最近项目沿用统一行片，打开和移除分别由独立按钮处理。 */}
       {recentTargets.length > 0 && (
         <div>
           <div className="flex items-center gap-1.5 mb-1">

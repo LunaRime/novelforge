@@ -12,7 +12,6 @@ import {
   FileText, MessageCircle, GitCompare, RefreshCw, Ellipsis,
 } from 'lucide-react'
 import type { ContextMenuEntry } from '../../ui/ContextMenu'
-import type { TextKey } from '../../../shared/locale'
 import { Button } from '../../ui/Button'
 import { useTranslation } from '../../../hooks/useTranslation'
 
@@ -83,11 +82,6 @@ async function openDocument(request: EditorOpenRequest): Promise<boolean> {
   }
 }
 
-/** Opening again preserves unsaved content through the central editor tab policy. */
-export async function openArchFile(filePath: string, name: string) {
-  await openDocument({ kind: 'path', locator: filePath, name, documentKind: 'arch-file' })
-}
-
 /** 打开内置编辑器 */
 export function openBuiltinEditor(id: string, name: string, type: 'chapter-card' | 'character' | 'world-building') {
   useEditorStore.getState().openFile({ id, name, type })
@@ -105,33 +99,6 @@ export function openDraftById(draftId: number, name: string): Promise<boolean> {
 /** 打开章节文件 */
 export async function openChapterFile(filePath: string, name: string) {
   await openDocument({ kind: 'path', locator: filePath, name, documentKind: 'chapter' })
-}
-
-// ===== 架构文件元信息 =====
-
-export interface ArchFile {
-  key: string
-  fileName: string
-  label: string
-  iconName: string
-  desc: string
-}
-
-export const ARCH_FILES: ArchFile[] = [
-  { key: 'premise', fileName: 'premise.md', label: '故事前提', iconName: 'target', desc: 'Logline、核心冲突、金手指定位' },
-  { key: 'characters', fileName: 'characters.md', label: '角色图谱', iconName: 'users', desc: '角色弧光、关系网、矛盾交织' },
-  { key: 'worldbuilding', fileName: 'worldbuilding.md', label: '世界观', iconName: 'globe', desc: '核心规则、阶层断层、深层危机' },
-  { key: 'synopsis', fileName: 'synopsis.md', label: '情节大纲', iconName: 'map', desc: '三幕式情节骨架' },
-]
-
-/** 返回翻译后的架构文件列表（保留原 ARCH_FILES 作为未翻译 fallback） */
-export function getArchFiles(t: (key: TextKey) => string): ArchFile[] {
-  return [
-    { key: 'premise', fileName: 'premise.md', label: t('arch.storyPremise') || ARCH_FILES[0].label, iconName: 'target', desc: t('arch.storyPremiseDesc') || ARCH_FILES[0].desc },
-    { key: 'characters', fileName: 'characters.md', label: t('arch.characterMap') || ARCH_FILES[1].label, iconName: 'users', desc: t('arch.characterMapDesc') || ARCH_FILES[1].desc },
-    { key: 'worldbuilding', fileName: 'worldbuilding.md', label: t('arch.worldBuilding') || ARCH_FILES[2].label, iconName: 'globe', desc: t('arch.worldBuildingDesc') || ARCH_FILES[2].desc },
-    { key: 'synopsis', fileName: 'synopsis.md', label: t('arch.plotOutline') || ARCH_FILES[3].label, iconName: 'map', desc: t('arch.plotOutlineDesc') || ARCH_FILES[3].desc },
-  ]
 }
 
 /** iconName → Lucide 图标组件映射 */

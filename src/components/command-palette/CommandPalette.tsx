@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { CreateIcon } from '../ui/ActionIcons'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  Bot, BookOpen, Brain, ChevronDown, Globe, FilePlus2, FolderOpen, Focus,
+  Bot, BookOpen, Brain, ChevronRight, Globe, FilePlus2, FolderOpen, Focus,
   Gauge, History, Import, Keyboard, LayoutGrid, Maximize2, Minus, PanelBottom,
-  PanelLeft, Plus, Search, Settings2, Sparkles, Sun, Terminal, TextCursorInput,
-  Users, Wand2, X, ZoomIn,
+  PanelLeft, Search, Settings2, Sparkles, Sun, Terminal, TextCursorInput,
+  Palette, Users, Wand2, X, ZoomIn,
 } from 'lucide-react'
 import { useCommandStore } from '../../stores/command-store'
 import { useLayoutStore, type SidebarView } from '../../stores/layout-store'
@@ -14,7 +15,9 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { SHORTCUT_DEFINITIONS, formatBinding, shortcutBinding, useShortcutStore } from '../../stores/shortcut-store'
 import { useDevConsoleStore } from '../../stores/dev-console-store'
-import { focusActiveWorkbenchMode } from '../../lib/workbench-focus'
+import { focusWorkbenchEditor } from '../../lib/workbench-focus'
+import { Button } from '../ui/Button'
+import './command-palette.css'
 
 interface CommandItem {
   id: string
@@ -33,27 +36,7 @@ interface ShortcutItem {
 }
 
 function Kbd({ children }: { children: ReactNode }) {
-  return (
-    <kbd
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minWidth: 18,
-        height: 18,
-        padding: '0 4px',
-        borderRadius: 4,
-        border: '1px solid var(--color-border)',
-        backgroundColor: 'var(--color-bg)',
-        color: 'var(--color-text-muted)',
-        fontFamily: 'var(--font-sans)',
-        fontSize: 10.5,
-        lineHeight: 1,
-      }}
-    >
-      {children}
-    </kbd>
-  )
+  return <kbd className="nf-command-key">{children}</kbd>
 }
 
 function openVersionHistory(name: string) {
@@ -97,12 +80,12 @@ export default function CommandPalette() {
   useEffect(() => {
     if (!open) return
     const origin = document.activeElement
-    const fromWorkbench = origin?.closest('[data-workbench-mode]')
+    const fromWorkbench = origin?.closest('[data-workbench]')
     return () => {
-      // 子面板可以切换模式。仅在整条命令面板关闭且焦点落到页面时归还焦点。
+      // 命令可能关闭原控件所在的面板，原控件卸载后将焦点还给编辑区。
       if (document.activeElement !== document.body || !(origin instanceof HTMLElement) || origin === document.body) return
       if (origin.isConnected) origin.focus({ preventScroll: true })
-      else if (fromWorkbench) focusActiveWorkbenchMode()
+      else if (fromWorkbench) focusWorkbenchEditor()
     }
   }, [open])
   if (!open) return null
@@ -120,6 +103,8 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
   const [query, setQuery] = useState('')
   const [selected, setSelected] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listId = useId()
+  const selectionSource = useRef<'keyboard' | 'pointer'>('keyboard')
   const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -169,7 +154,7 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
       },
       {
         id: 'new-chapter', label: t('chapter.newChapter'), category: t('command.group.general'),
-        icon: <Plus size={15} />, keywords: 'chapter 新建章节',
+        icon: <CreateIcon size={15} />, keywords: 'chapter 新建章节',
         run: () => layout.openChapterCreation(),
       },
       ...(__DEV_CONSOLE__ && devConsoleEnabled ? [{
@@ -234,10 +219,14 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         run: () => layout.toggleBottomPanel(),
       },
       {
-        id: 'toggle-workbench-mode', label: t('command.toggleWorkbenchMode'), category: t('command.group.view'),
-        shortcut: sc('toggle-workbench-mode'), icon: <LayoutGrid size={15} />,
-        keywords: `workbench build write ${t('workbench.build')} ${t('workbench.write')}`,
-        run: () => layout.toggleWorkbenchMode(),
+        id: 'show-tasks', label: t('panel.tasks'), category: t('command.group.view'),
+        icon: <PanelBottom size={15} />, keywords: 'tasks workflow 任务',
+        run: () => layout.openBottomTab('tasks'),
+      },
+      {
+        id: 'show-logs', label: t('panel.log'), category: t('command.group.view'),
+        icon: <PanelBottom size={15} />, keywords: 'logs 日志',
+        run: () => layout.openBottomTab('log'),
       },
       {
         id: 'focus-mode', label: t('command.focusMode'), category: t('command.group.view'),
@@ -284,6 +273,7 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
       themeCommand('theme-galaxy', t('theme.starry'), 'galaxy', <Sparkles size={15} />),
       themeCommand('theme-paper', t('theme.paper'), 'paper', <BookOpen size={15} />),
       themeCommand('theme-dark', t('theme.dark'), 'dark', <Brain size={15} />),
+      themeCommand('theme-custom', t('theme.custom'), 'custom', <Palette size={15} />),
       {
         id: 'zoom-in', label: t('zoom.in'), category: t('command.group.theme'),
         shortcut: sc('zoom-in'), icon: <ZoomIn size={15} />,
@@ -332,10 +322,11 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
   const safeSelected = Math.min(selected, Math.max(0, itemCount - 1))
 
   useEffect(() => {
+    if (selectionSource.current === 'pointer') return
     const el = listRef.current?.querySelector<HTMLElement>(`[data-command-index="${safeSelected}"]`)
     // jsdom 没有 scrollIntoView；浏览器/Electron 有，测试环境跳过即可
     if (el && typeof el.scrollIntoView === 'function') el.scrollIntoView({ block: 'nearest' })
-  }, [safeSelected])
+  }, [safeSelected, normalized])
 
   const runCommand = (cmd: CommandItem) => {
     close()
@@ -344,18 +335,24 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
   }
 
   const onKeyDown = (event: React.KeyboardEvent) => {
+    // 输入法确认候选词时，方向键和回车仍由输入法处理。
+    if (event.nativeEvent.isComposing) return
     if (event.key === 'Escape') {
       event.preventDefault()
       close()
       return
     }
     if (event.key === 'Tab') {
-      // 命令面板只有一个真实输入面：Tab 不把焦点丢到背后的编辑器
+      // 结果由搜索框的方向键选中，Tab 在搜索框和标题栏操作之间循环。
+      const controls = Array.from(event.currentTarget.querySelectorAll<HTMLElement>('[data-command-control]'))
+      const controlIndex = controls.indexOf(document.activeElement as HTMLElement)
+      const nextIndex = (controlIndex + (event.shiftKey ? -1 : 1) + controls.length) % controls.length
       event.preventDefault()
-      inputRef.current?.focus()
+      controls[nextIndex]?.focus()
       return
     }
-    if (itemCount === 0) return
+    if (event.target !== inputRef.current || itemCount === 0) return
+    selectionSource.current = 'keyboard'
     if (event.key === 'ArrowDown') {
       event.preventDefault()
       setSelected((i) => (i + 1) % itemCount)
@@ -376,25 +373,11 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
   const rows: ReactNode[] = []
   let lastCategory = ''
   if (mode === 'shortcuts') {
-    rows.push(
-      <div key="shortcuts-title" style={{ padding: '10px 14px 6px', fontSize: 11, color: 'var(--color-text-muted)' }}>
-        {t('command.shortcutsTitle')}
-      </div>,
-    )
     filteredShortcuts.forEach((item, index) => {
       rows.push(
-        <div
-          key={item.id}
-          data-command-index={index}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            height: 34, padding: '0 12px', margin: '0 4px', borderRadius: 6,
-            backgroundColor: index === safeSelected ? 'var(--color-active)' : 'transparent',
-            color: 'var(--color-text-secondary)',
-            fontSize: 12,
-          }}
-        >
-          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
+        <div key={item.id} id={`${listId}-${index}`} role="option" aria-selected={index === safeSelected}
+          data-command-index={index} className="nf-command-row nf-command-shortcut">
+          <span className="nf-command-label">{item.label}</span>
           <Kbd>{item.shortcut || t('shortcut.unassigned')}</Kbd>
         </div>,
       )
@@ -403,124 +386,81 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
     filteredCommands.forEach((cmd, index) => {
       if (cmd.category !== lastCategory) {
         lastCategory = cmd.category
-        rows.push(
-          <div key={`cat-${cmd.category}-${index}`} style={{ padding: '8px 14px 4px', fontSize: 11, color: 'var(--color-text-muted)' }}>
-            {cmd.category}
-          </div>,
-        )
+        rows.push(<div key={`cat-${cmd.category}-${index}`} role="presentation" className="nf-command-group">{cmd.category}</div>)
       }
       rows.push(
         <button
           key={cmd.id}
+          id={`${listId}-${index}`}
           type="button"
+          role="option"
+          aria-selected={index === safeSelected}
           data-command-index={index}
-          onMouseEnter={() => setSelected(index)}
-          onClick={() => runCommand(cmd)}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 10, width: 'calc(100% - 8px)',
-            height: 34, padding: '0 10px', margin: '0 4px', borderRadius: 6, border: 'none',
-            backgroundColor: index === safeSelected ? 'var(--color-active)' : 'transparent',
-            color: index === safeSelected ? 'var(--color-text)' : 'var(--color-text-secondary)',
-            fontSize: 12, textAlign: 'left', cursor: 'pointer',
+          tabIndex={-1}
+          className="nf-command-row"
+          onPointerMove={() => {
+            selectionSource.current = 'pointer'
+            setSelected(index)
           }}
+          onMouseDown={event => event.preventDefault()}
+          onClick={() => runCommand(cmd)}
         >
-          <span style={{ display: 'inline-flex', color: 'var(--color-text-muted)' }}>{cmd.icon}</span>
-          <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{cmd.label}</span>
+          <span className="nf-command-icon" aria-hidden="true">{cmd.icon}</span>
+          <span className="nf-command-label">{cmd.label}</span>
           {cmd.shortcut && <Kbd>{cmd.shortcut}</Kbd>}
-          {index === safeSelected && <ChevronDown size={12} style={{ transform: 'rotate(-90deg)', color: 'var(--color-text-muted)' }} />}
+          <ChevronRight className="nf-command-arrow" size={13} aria-hidden="true" />
         </button>,
       )
     })
   }
 
+  const title = t(mode === 'shortcuts' ? 'command.shortcutsTitle' : 'command.title')
+  const placeholder = t(mode === 'shortcuts' ? 'command.shortcutsSearch' : 'command.placeholder')
+
   return (
-    <div
-      role="presentation"
-      onMouseDown={(event) => { if (event.target === event.currentTarget) close() }}
-      style={{
-        position: 'fixed', inset: 0, zIndex: 'var(--z-modal)',
-        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
-        paddingTop: '12vh',
-        backgroundColor: 'var(--color-backdrop)',
-        backdropFilter: 'blur(6px)',
-      }}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('command.title')}
-        onKeyDown={onKeyDown}
-        style={{
-          width: 'min(640px, calc(100vw - 32px))',
-          maxHeight: 'min(620px, 68vh)',
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-          backgroundColor: 'var(--color-panel)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 10,
-          boxShadow: 'var(--shadow-popover)',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0 14px', height: 46, borderBottom: '1px solid var(--color-border)' }}>
-          <Search size={15} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(event) => { setQuery(event.target.value); setSelected(0) }}
-            placeholder={mode === 'shortcuts' ? t('command.shortcutsSearch') : t('command.placeholder')}
-            aria-label={t('command.placeholder')}
-            style={{
-              flex: 1, minWidth: 0, height: '100%', border: 'none', outline: 'none',
-              backgroundColor: 'transparent', color: 'var(--color-text)', fontSize: 13,
-            }}
-          />
+    <div className="nf-command-overlay" role="presentation"
+      onMouseDown={event => { if (event.target === event.currentTarget) close() }}>
+      <div className="nf-command-panel" role="dialog" aria-modal="true" aria-label={title} onKeyDown={onKeyDown}>
+        <div className="nf-command-header">
+          <div className="nf-command-search">
+            <Search size={16} aria-hidden="true" />
+            <input
+              ref={inputRef}
+              data-command-control
+              role="combobox"
+              aria-expanded={true}
+              aria-autocomplete="list"
+              aria-controls={listId}
+              aria-activedescendant={itemCount > 0 ? `${listId}-${safeSelected}` : undefined}
+              value={query}
+              onChange={event => {
+                selectionSource.current = 'keyboard'
+                setQuery(event.target.value)
+                setSelected(0)
+              }}
+              placeholder={placeholder}
+              aria-label={placeholder}
+            />
+          </div>
           {mode === 'shortcuts' && (
-            <button
-              type="button"
-              onClick={() => openPalette('commands')}
-              style={{ border: 'none', background: 'transparent', color: 'var(--color-text-muted)', fontSize: 11, cursor: 'pointer' }}
-            >
+            <Button data-command-control type="button" variant="ghost" size="sm" onClick={() => openPalette('commands')}>
               {t('command.backToCommands')}
-            </button>
+            </Button>
           )}
-          {/* 显式关闭出口：此前只有 Esc 与点遮罩（审计 P1-A3） */}
-          <button
-            type="button"
-            onClick={() => close()}
-            aria-label={t('action.close')}
-            title={t('action.close')}
-            style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              width: 24, height: 24, borderRadius: 6, border: 'none',
-              background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0,
-            }}
-          >
-            <X size={13} />
-          </button>
+          <Button data-command-control type="button" variant="ghost" size="icon" onClick={close}
+            aria-label={t('action.close')} title={t('action.close')}>
+            <X size={16} aria-hidden="true" />
+          </Button>
         </div>
 
-        <div ref={listRef} className="overscroll-contain" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 6px' }}>
-          {itemCount === 0 ? (
-            <div style={{ padding: '28px 14px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>
-              {t('command.empty')}
-            </div>
-          ) : rows}
-        </div>
+        <div id={listId} ref={listRef} className="nf-command-results" role="listbox" aria-label={title}>{rows}</div>
+        {itemCount === 0 && <p className="nf-command-empty" role="status">{t('command.empty')}</p>}
 
-        <div
-          style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '0 14px', height: 32, flexShrink: 0,
-            borderTop: '1px solid var(--color-border)',
-            color: 'var(--color-text-muted)', fontSize: 11,
-          }}
-        >
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Kbd>↑</Kbd><Kbd>↓</Kbd>{t('command.hintNavigate')}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Kbd>Enter</Kbd>{t('command.hintRun')}</span>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><Kbd>Esc</Kbd>{t('command.hintClose')}</span>
-          <span style={{ flex: 1 }} />
-          <span>{t('command.footer')}</span>
-        </div>
+        <footer className="nf-command-footer">
+          <span><Kbd>↑</Kbd><Kbd>↓</Kbd>{t('command.hintNavigate')}</span>
+          {mode === 'commands' && <span><Kbd>Enter</Kbd>{t('command.hintRun')}</span>}
+          <span><Kbd>Esc</Kbd>{t('command.hintClose')}</span>
+        </footer>
       </div>
     </div>
   )

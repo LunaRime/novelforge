@@ -2,7 +2,8 @@
 import { afterAll, afterEach, beforeAll, expect, test, vi } from 'vitest'
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { setCurrentLocale, type SupportedLocale } from '../../shared/locale'
+import { formatBinding, shortcutBinding } from '../../stores/shortcut-store'
+import { setCurrentLocale, t, type SupportedLocale } from '../../shared/locale'
 
 vi.mock('../panels/sidebar/SidebarShared', () => ({ renderIcon: () => null }))
 vi.mock('../dialogs/ArchitectureConfirmDialog', () => ({ default: () => null }))
@@ -29,12 +30,13 @@ afterEach(() => {
   setCurrentLocale('zh-CN')
 })
 
-test.each<[SupportedLocale, string, string]>([
-  ['zh-CN', '保存', '保存（Cmd+S）'],
-  ['en-US', 'Save', 'Save (Cmd+S)'],
-  ['ru-RU', 'Сохранить', 'Сохранить (Cmd+S)'],
-])('architecture save button follows %s for its visible label and tooltip (#41)', (locale, label, title) => {
+test.each<[SupportedLocale, string]>([
+  ['zh-CN', '保存'],
+  ['en-US', 'Save'],
+  ['ru-RU', 'Сохранить'],
+])('architecture save button follows %s for its visible label and tooltip (#41)', (locale, label) => {
   setCurrentLocale(locale)
+  const title = t('tip.saveShortcut').replace('{shortcut}', formatBinding(shortcutBinding('save')))
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)

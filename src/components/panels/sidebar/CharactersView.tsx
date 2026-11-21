@@ -1,15 +1,15 @@
 /**
  * CharactersView — 角色管理列表视图 (v7 戏份分级)
  */
-import { useState, useMemo } from 'react'
-import { Users, RefreshCw, Plus, Sparkles, ChevronDown, ChevronRight, Radar } from 'lucide-react'
+import { useState, useMemo, useId } from 'react'
+import { Users, RefreshCw, Sparkles, ChevronDown, ChevronRight, Radar, Network } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import {
   useCharacterStore, groupByTier,
 } from '../../../stores/character-store'
 import type { CharacterCard } from '../../../stores/character-store'
-import type { TextKey } from '../../../shared/locale'
 import { Button } from '../../ui/Button'
+import { CreateIcon } from '../../ui/ActionIcons'
 import { Input } from '../../ui/Input'
 import { EmptyState } from '../../ui/EmptyState'
 import { confirm } from '../../ui/Confirm'
@@ -23,24 +23,20 @@ import { parseAliases } from '../../../services/character-normalize'
 import { renderLog } from '../../../services/render-logger'
 import { captureCharacterSource, isCharacterSourceCurrent, readCharacterEdits } from '../../../services/characters/character-edits-adapter'
 
-// 角色定位 / 戏份等级 i18n 映射（不使用 store 硬编码常量，语言切换即时更新）
-const ROLE_LABEL_KEYS: Record<CharacterCard['role'], TextKey> = {
-  protagonist: 'character.roleLabel.protagonist',
-  antagonist: 'character.roleLabel.antagonist',
-  supporting: 'character.roleLabel.supporting',
-  minor: 'character.roleLabel.minor',
-}
-const TIER_LABEL_KEYS: Record<number, TextKey> = {
-  1: 'character.tierLabel.core',
-  2: 'character.tierLabel.important',
-  3: 'character.tierLabel.minor',
-}
+import { FilterButtons } from '../../ui/ChoiceControls'
+import CountBadge from '../../ui/CountBadge'
+import { SemanticLabel } from '../../ui/SemanticLabel'
+import { characterRole, characterRoles, characterTier } from '../../editor/character-labels'
+import { readAppearanceChapters } from '../../editor/character-links'
+import MenuRow from '../../ui/MenuRow'
 
-export default function CharactersView() {
+export default function CharactersView({ headerAction }: { headerAction?: React.ReactNode }) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const characters = useCharacterStore(s => s.characters)
   const selectedName = useCharacterStore(s => s.selectedName)
+  const view = useCharacterStore(s => s.view)
+  const setView = useCharacterStore(s => s.setView)
   const load = useCharacterStore(s => s.load)
   const setSelectedName = useCharacterStore(s => s.setSelectedName)
   const addCharacter = useCharacterStore(s => s.addCharacter)
@@ -80,6 +76,7 @@ export default function CharactersView() {
   }
   const [tierFilter, setTierFilter] = useState<number | null>(null)
   const [collapsedTiers, setCollapsedTiers] = useState<Record<number, boolean>>({ 2: false, 3: true })
+  const groupsId = useId()
   // P1-1：名字/别名即时过滤（大小写不敏感；空查询 = 全部）
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
@@ -150,104 +147,112 @@ export default function CharactersView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* 顶部操作栏 */}
-      <div className="flex items-center justify-between px-3 h-9 flex-shrink-0 border-b border-[var(--color-border)]">
-        <span className="text-xs font-medium text-[var(--color-text)] flex items-center gap-1">
-          <Users size={13} />
+      <div className="flex items-center justify-between gap-1 px-2 h-9 flex-shrink-0 border-b border-[var(--color-border)]">
+        <span className="text-xs font-medium text-[var(--color-text)] min-w-0 truncate" title={t('charList.title')}>
           {t('charList.title')} ({characters.length})
         </span>
-        <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRefresh} title={t('charList.refresh')}>
-            <RefreshCw size={14} strokeWidth={2} />
+        <div className="flex shrink-0 items-center gap-0.5">
+          <Button variant="ghost" size="icon" className="size-[32px]" onClick={handleRefresh} title={t('charList.refresh')} aria-label={t('charList.refresh')}>
+            <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
           </Button>
           {/* P2-1：出场统计扫描（存量项目生命周期字段回填） */}
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => void handleScan()} disabled={scanning} title={t('charList.scanAppearances')}>
-            <Radar size={14} strokeWidth={2} />
+          <Button variant="ghost" size="icon" className="size-[32px]" onClick={() => void handleScan()} disabled={scanning} title={t('charList.scanAppearances')} aria-label={t('charList.scanAppearances')}>
+            <Radar size={14} strokeWidth={2} aria-hidden="true" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleArchive} disabled={archiving} title={t('character.archiveBtnTitle')}>
-            <Sparkles size={14} strokeWidth={2} />
+          <Button variant="ghost" size="icon" className="size-[32px]" onClick={handleArchive} disabled={archiving} title={t('character.archiveBtnTitle')} aria-label={t('character.archiveBtnTitle')}>
+            <Sparkles size={14} strokeWidth={2} aria-hidden="true" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={addCharacter} title={t('charList.newChar')}>
-            <Plus size={14} strokeWidth={2} />
+          <Button variant="ghost" size="icon" className="size-[32px]" onClick={() => {
+            addCharacter()
+            openBuiltinEditor('character-editor', t('character.viewProfile'), 'character')
+          }} title={t('charList.newChar')} aria-label={t('charList.newChar')}>
+            <CreateIcon size={14} />
           </Button>
+          {headerAction}
         </div>
       </div>
 
-      {/* 分级筛选标签 — ⚠️ 容器 flex-wrap + 胶囊 whitespace-nowrap/flex-shrink-0：
-          4 个胶囊（含「★★★ 核心 3」这类长文案）在侧栏宽度里放不下一行，
-          缺这三项会被 flex 压缩成「胶囊内不均折行」（2026-09-28 真机走查缺陷） */}
-      <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
-        {[null, 1, 2, 3].map(tier => (
-          <button
-            key={String(tier)}
-            className={cn(
-              'text-micro px-2 py-0.5 rounded-full transition-colors cursor-pointer border whitespace-nowrap flex-shrink-0',
-              tierFilter === tier
-                ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-accent)]'
-                : 'border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-hover)]'
-            )}
-            onClick={() => setTierFilter(tier)}
-            type="button"
-          >
-            {tier === null ? t('charList.filterAll') : t(TIER_LABEL_KEYS[tier] ?? 'character.tierLabel.core')}
-            <span className="ml-0.5 opacity-60">{tier === null ? characters.length : (grouped[tier] || []).length}</span>
-          </button>
-        ))}
-      </div>
+      {/* 筛选选项和分组标题共用角色等级语义。 */}
+      <FilterButtons
+        className="shrink-0 border-b border-[var(--color-border)] px-2 py-1.5"
+        size="sm"
+        value={tierFilter ?? 0}
+        onChange={tier => setTierFilter(tier || null)}
+        items={[0, 1, 2, 3].map(tier => ({
+          value: tier,
+          label: <>
+            {tier === 0 ? t('charList.filterAll') : t(characterTier(tier).label)}
+            <CountBadge value={tier === 0 ? characters.length : (grouped[tier] || []).length} />
+          </>,
+        }))}
+      />
 
-      {/* P1-1：名字/别名搜索框 */}
-      <div className="px-2 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
-        {/* 侧栏内的紧凑尺寸：h-7/text-xs → h-6/text-micro。其余外观与交互（描边、底色、
-            focus 环、hover 转描边、禁用态）全走 ui/Input，不再逐个手写 */}
-        <Input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('charList.searchPlaceholder')}
-          className="h-6 px-2 text-micro"
+      <div className="shrink-0 border-b border-[var(--color-border)] px-1 pb-1.5 pt-1">
+        <MenuRow
+          icon={<Network size={14} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />}
+          title={t('character.viewGraph')}
+          titleHint={t('character.viewRelations')}
+          swap="nav"
+          active={view === 'graph'}
+          onPrimary={() => {
+            setView('graph')
+            openBuiltinEditor('character-editor', t('character.viewProfile'), 'character')
+          }}
         />
+        <div className="px-1 pt-1">
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('charList.searchPlaceholder')}
+            aria-label={t('charList.searchPlaceholder')}
+            className="h-8 px-2"
+          />
+        </div>
       </div>
 
       {/* 角色列表 — 按 tier 分组 */}
       <div className="flex-1 overflow-y-auto p-1">
         {characters.length === 0 ? (
           <EmptyState message={t('character.empty')} size="xs" className="text-center" />
+        ) : !Object.values(display).some(cards => cards.length > 0) ? (
+          <EmptyState message={t('charList.noMatches')} size="xs" className="text-center" />
         ) : (
           [1, 2, 3].map(tier => {
             const chars = display[tier] || []
             if (chars.length === 0) return null
             const collapsed = collapsedTiers[tier] ?? false
+            const groupId = `${groupsId}-${tier}`
             return (
               <div key={tier}>
-                {/* tier 分组头 — 2026-09-28 批 0：头行改「行片」（`.menu-chip`，32px 高），
-                    悬停底色由片承担（`menu-chip:where(button):hover`），原 `hover:bg-*`/`rounded` 随之删除。
-                    去 `w-full`：片是**块级** flex 容器本已铺满，而 `width:100%` 会与片自带的
-                    `margin: 2px 4px` 叠加，左右各溢出 4px。chevron 保持常驻 ›/⌄（头行只有折叠
-                    一个行为，箭头即状态指示，不做悬停置换）。 */}
-                <button
-                  className="menu-chip flex items-center gap-1 px-2 text-micro font-medium text-[var(--color-text-muted)] cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); setCollapsedTiers(prev => ({ ...prev, [tier]: !collapsed })) }}
-                  type="button"
-                >
-                  {collapsed
-                    ? <ChevronRight size={10} />
-                    : <ChevronDown size={10} />
-                  }
-                  {t(TIER_LABEL_KEYS[tier] ?? 'character.tierLabel.core')}
-                  <span className="opacity-50 ml-auto">{chars.length}</span>
-                </button>
-                {!collapsed && chars.map(c => (
-                  <CharItem
-                    key={c.name}
-                    char={c}
-                    selected={selectedName === c.name}
-                    onClick={() => {
-                      // 角色 Tab 可能被手动关闭——点击角色时确保重新打开并激活
-                      // （openFile 已存在则仅激活；不存在则新开 'character-editor' Tab）
-                      openBuiltinEditor('character-editor', t('charList.title'), 'character')
-                      setSelectedName(c.name)
-                    }}
-                  />
-                ))}
+                {/* 网格伸展将原生按钮铺满行宽，行片两侧各 4px 外边距与搜索框边缘对齐。 */}
+                <div className="grid">
+                  <button
+                    className="menu-chip gap-1.5 border border-[var(--color-border)] bg-[var(--color-panel)] px-2 text-xs font-medium text-[var(--color-text-secondary)] cursor-pointer"
+                    onClick={() => setCollapsedTiers(prev => ({ ...prev, [tier]: !collapsed }))}
+                    aria-expanded={!collapsed}
+                    aria-controls={groupId}
+                    type="button"
+                  >
+                    {collapsed ? <ChevronRight size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}
+                    <SemanticLabel name={characterTier(tier).icon}>{t(characterTier(tier).label)}</SemanticLabel>
+                    <CountBadge value={chars.length} className="ml-auto" />
+                  </button>
+                </div>
+                <div id={groupId} hidden={collapsed}>
+                  {!collapsed && chars.map(c => (
+                    <CharItem
+                      key={c.name}
+                      char={c}
+                      selected={view !== 'graph' && selectedName === c.name}
+                      onClick={() => {
+                        setSelectedName(c.name)
+                        setView('edit')
+                        openBuiltinEditor('character-editor', t('character.viewProfile'), 'character')
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
             )
           })
@@ -266,12 +271,7 @@ function CharItem({ char: c, selected, onClick }: {
   let tags: string[] = []
   try { tags = JSON.parse(c.tags || '[]') } catch { tags = [] }
 
-  // 解析出场章节（Array.isArray 守卫：裸 JSON 文本框可存 "1,5" 字符串——此前 join 抛 TypeError 崩溃）
-  let chaps: number[] = []
-  try {
-    const parsed = JSON.parse(c.appearChapters || '[]')
-    if (Array.isArray(parsed)) chaps = parsed as number[]
-  } catch { chaps = [] }
+  const chaps = readAppearanceChapters(c.appearChapters)
 
   const chapsDisplay = chaps.length <= 3
     ? chaps.join(',')
@@ -281,6 +281,7 @@ function CharItem({ char: c, selected, onClick }: {
         .replace('{n}', String(chaps.length))
 
   const tier = c.tier ?? (c.role === 'protagonist' || c.role === 'antagonist' ? 1 : 2)
+  const role = characterRole(c.role)
 
   /* 2026-09-28 批 0：行容器改「行片」（`.menu-chip`）——圆角/左右外边距/悬停底色/2px 片间距
      全部由片承担，原 `rounded-md`/`hover:bg-*`/`mb-0.5`/`transition-colors` 随之删除。
@@ -333,10 +334,10 @@ function CharItem({ char: c, selected, onClick }: {
             </span>
           ) : null}
         </div>
-        <div className="text-micro mt-0.5 opacity-60 flex items-center gap-1.5">
-          <span>{t(ROLE_LABEL_KEYS[c.role] ?? 'character.roleLabel.supporting')}</span>
+        <div className="text-micro mt-0.5 flex items-center gap-2 text-[var(--color-text-secondary)]">
+          <SemanticLabel name={role}>{t(characterRoles[role])}</SemanticLabel>
           {tier === 1 && chaps.length > 0 && (
-            <span className="opacity-50">· {chapsDisplay}</span>
+            <span className="text-[var(--color-text-muted)]">{chapsDisplay}</span>
           )}
         </div>
         {tags.length > 0 && (

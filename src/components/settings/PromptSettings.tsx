@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { ChevronDown, ChevronRight, Globe, FolderOpen, RotateCcw, AlertTriangle } from 'lucide-react'
 import {
@@ -19,7 +20,8 @@ import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
-import { Textarea } from '../ui/Textarea'
+import { SemanticLabel } from '../ui/SemanticLabel'
+import MarkdownField from '../ui/MarkdownField'
 import { confirm } from '../ui/Confirm'
 import { renderLog } from '../../services/render-logger'
 
@@ -60,13 +62,12 @@ export default function PromptSettings() {
   const triggerRefresh = useCallback(() => setRefreshKey((k) => k + 1), [])
 
   return (
-    <div className="space-y-2" key={refreshKey}>
+    <div className="nf-settings-stack" key={refreshKey}>
       {/* 说明 */}
       <div
-        className="flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs mb-4"
-        style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
+        className="nf-settings-panel flex flex-wrap items-baseline gap-x-2 gap-y-1 text-xs text-[var(--color-text-secondary)]"
       >
-        <span className="flex-shrink-0 mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('prompt.tip')}</span>
+        <span className="font-semibold text-[var(--color-accent)]">{t('prompt.tip')}</span>
         <span>{t('prompt.description')}</span>
       </div>
 
@@ -235,6 +236,8 @@ function TemplateItem({
   return (
     <div
       className="rounded-xl overflow-hidden transition-colors"
+      // 已有覆盖写回其原范围，新模板优先在当前项目内保存。
+      onKeyDown={event => handleSaveShortcut(event, source === 'global' || !projectPath ? handleSaveGlobal : handleSaveProject, isExpanded && !saving)}
       style={{
         border: `1px solid ${isExpanded ? 'var(--color-accent)' : 'var(--color-border)'}`,
         backgroundColor: 'var(--color-panel)',
@@ -242,7 +245,9 @@ function TemplateItem({
     >
       {/* 折叠头部 */}
       <button
-        className="w-full flex items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-[var(--color-hover)] outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)]"
+        type="button"
+        aria-expanded={isExpanded}
+        className="flex w-full cursor-pointer items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-[var(--color-hover)] outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)]"
         onClick={onToggle}
       >
         {isExpanded ? (
@@ -251,7 +256,7 @@ function TemplateItem({
           <ChevronRight size={14} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
         )}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
               {PROMPT_NAME_KEYS[builtinTemplate.key]
                 ? t(PROMPT_NAME_KEYS[builtinTemplate.key])
@@ -306,11 +311,14 @@ function TemplateItem({
 
           {/* 编辑 textarea */}
           <div>
-            {/* 描边/正文色/焦点环（含聚焦时描边转 accent）/禁用态走 ui/Textarea——
+            {/* 描边/正文色/焦点环（含聚焦时描边转 accent）/禁用态走 ui/MarkdownField——
                 原先靠 onFocus/onBlur 手工改 borderColor，现由 focus:border-[var(--color-accent)] 承担。
                 这里只留提示词编辑器特有的：编辑器底色、圆角、等宽字体与高度区间 */}
-            <Textarea
+            <MarkdownField startInEdit
               ref={textareaRef}
+              aria-label={PROMPT_NAME_KEYS[builtinTemplate.key]
+                ? t(PROMPT_NAME_KEYS[builtinTemplate.key])
+                : builtinTemplate.name}
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
               className="rounded-lg px-3 py-2.5 font-mono"
@@ -415,8 +423,7 @@ function TemplateItem({
                   : 'color-mix(in srgb, var(--color-error) 20%, transparent)',
               }}
             >
-              {saveResult.type === 'success' ? '✅ ' : '❌ '}
-              {saveResult.msg}
+              <SemanticLabel name={saveResult.type}>{saveResult.msg}</SemanticLabel>
             </div>
           )}
         </div>

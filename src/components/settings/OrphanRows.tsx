@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, Settings2, Trash2 } from 'lucide-react'
+import { Check, Cpu, Settings2, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useLLMStore } from '../../stores/llm-store'
 import type { ModelProfile } from '../../shared/ipc-channels'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
+import { getCurrentLocale } from '../../shared/locale'
 import { renderLog } from '../../services/render-logger'
 import MenuRow from '../ui/MenuRow'
 import { Spinner } from '../ui/Spinner'
@@ -25,7 +26,7 @@ import { ModelForm } from './ModelForm'
  * 定点刷新一次。手工条目不在账户表里，全量刷新（不传 refs）只覆盖账户 ref —— 保存后新分配的 ref
  * 要靠这里补上，否则 placeholder 会一直停在「输入 API 密钥」。
  */
-export function OrphanRows({ models }: { models: ModelProfile[] }) {
+export function OrphanRows({ models, sortByName = false }: { models: ModelProfile[]; sortByName?: boolean }) {
   const { t } = useTranslation()
   const defaultModelId = useLLMStore((s) => s.defaultModelId)
   const defaultEmbeddingModelId = useLLMStore((s) => s.defaultEmbeddingModelId)
@@ -54,6 +55,10 @@ export function OrphanRows({ models }: { models: ModelProfile[] }) {
 
   /** 显示层倒序（新添加在最上）；操作按 id 定位，与显示顺序无关 */
   const rows = [...models].reverse()
+  if (sortByName) {
+    const byName = new Intl.Collator(getCurrentLocale(), { numeric: true })
+    rows.sort((a, b) => byName.compare(a.name || a.modelName, b.name || b.modelName))
+  }
   const isEmb = (m: ModelProfile) => m.purposes?.includes('embedding') ?? false
   const isDefault = (m: ModelProfile) =>
     isEmb(m) ? defaultEmbeddingModelId === m.id : defaultModelId === m.id
@@ -113,10 +118,10 @@ export function OrphanRows({ models }: { models: ModelProfile[] }) {
         <div key={m.id}>
           {/* 行卡壳：与供应商行同款（rounded-xl + 描边 + panel 底）——并入主列表后不再有「其他」容器 */}
           <div
-            className="rounded-xl overflow-hidden mx-1 mb-1.5"
-            style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+            className="rounded-xl border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-1"
           >
             <MenuRow
+              icon={<Cpu size={14} className="shrink-0 text-[var(--color-text-secondary)]" aria-hidden="true" />}
               title={m.name || m.modelName}
               titleSuffix={
                 <>
@@ -135,8 +140,11 @@ export function OrphanRows({ models }: { models: ModelProfile[] }) {
                   )}
                 </>
               }
-              count={m.modelName}
+              count={m.name && m.name !== m.modelName
+                ? <span className="block max-w-24 truncate" title={m.modelName}>{m.modelName}</span>
+                : undefined}
               onPrimary={() => startEdit(m)}
+              active={editing?.draft.id === m.id}
               titleHint={t('action.edit')}
               actions={
                 <div className="flex items-center gap-1 pr-1">

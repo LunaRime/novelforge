@@ -1,9 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
-import { CheckCircle2, Circle, Sparkles, X, ChevronRight, StopCircle, Play, HardDrive } from 'lucide-react'
+import { CheckCircle2, Circle, Sparkles, ChevronRight, StopCircle, Play, HardDrive } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useWorkflowStore, type WorkflowRun, type WorkflowStep } from '../../stores/workflow-store'
-import { useLayoutStore } from '../../stores/layout-store'
 import MarkdownContent from '../ui/MarkdownContent'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useOutputFileTail } from '../../hooks/useOutputFileTail'
@@ -26,43 +25,16 @@ export default function AIOutputPanel() {
     ?? activeRuns.find(run => run.status === 'running' || run.status === 'waiting') ?? activeRuns[0]
 
   return (
-    <div
-      className="flex flex-col h-full overflow-hidden"
-      style={{
-        backgroundColor: 'var(--color-sidebar)',
-        borderLeft: '1px solid var(--color-border)',
-      }}
-    >
-      {/* 面板头部 */}
-      <div
-        className="no-select flex items-center justify-between gap-1.5 px-2 flex-shrink-0"
-        style={{
-          height: 'var(--height-panel-header)',
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        <span
-          className="text-xs font-medium"
-          style={{ color: 'var(--color-text-muted)' }}
-        >
-          {t('agent.aiOutput')}
-        </span>
-        {viewRun && allRuns.length > 1 && <select aria-label={t('agent.history')} value={viewRun.id}
-          onChange={event => setViewRunId(event.target.value)}
-          className="ml-auto min-w-0 max-w-36 truncate rounded border border-[var(--color-border)] bg-[var(--color-sidebar)] px-1 text-xs">
-          {!allRuns.some(run => run.id === viewRun.id) && <option value={viewRun.id}>{viewRun.title}</option>}
-          {allRuns.map(run => <option key={run.id} value={run.id}>{run.title}</option>)}
-        </select>}
-        <button
-          onClick={() => useLayoutStore.getState().setAIPanelOpen(false)}
-          title={t('action.close')}
-          className="icon-btn"
-          style={{ width: 20, height: 20 }}
-        >
-          <X size={13} strokeWidth={1.5} />
-        </button>
-      </div>
-
+    <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      {viewRun && allRuns.length > 1 && (
+        <div className="shrink-0 border-b border-[var(--color-border)] px-2 py-1.5">
+          <select aria-label={t('agent.history')} value={viewRun.id} onChange={event => setViewRunId(event.target.value)}
+            className="h-8 w-full min-w-0 truncate rounded-md border border-[var(--color-border)] bg-[var(--color-editor-bg)] px-2 text-xs">
+            {!allRuns.some(run => run.id === viewRun.id) && <option value={viewRun.id}>{viewRun.title}</option>}
+            {allRuns.map(run => <option key={run.id} value={run.id}>{run.title}</option>)}
+          </select>
+        </div>
+      )}
       {/* 内容区 */}
       <div className="flex-1 overflow-hidden">
         {viewRun ? (
@@ -97,7 +69,7 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-2 px-6" style={{ color: 'var(--color-text-muted)' }}>
       <Sparkles size={20} style={{ opacity: 0.2 }} />
-      <span className="text-xs opacity-60">{t('agent.noOutput')}</span>
+      <span className="text-xs">{t('agent.noOutput')}</span>
     </div>
   )
 }

@@ -3,6 +3,7 @@ import { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { expect, it, vi } from 'vitest'
 import { t } from '../../shared/locale'
+import { useLayoutStore } from '../../stores/layout-store'
 import EditorToolbar, { type EditorToolbarProps } from './EditorToolbar'
 
 it('keeps save available and runs the same version actions from the overflow', async () => {
@@ -22,6 +23,11 @@ it('keeps save available and runs the same version actions from the overflow', a
     expect(trigger).not.toBeNull()
     act(() => button(t('editor.save'))?.click())
     expect(props.onSave).toHaveBeenCalledOnce()
+    const appearance = host.querySelector<HTMLButtonElement>(`button[aria-label="${t('settings.typography')}"]`)
+    expect(appearance).not.toBeNull()
+    act(() => appearance?.click())
+    expect(useLayoutStore.getState()).toMatchObject({ settingsOpen: true, settingsSection: 'editor' })
+    act(() => useLayoutStore.getState().closeSettings())
     act(() => trigger?.click())
     const menu = host.querySelector(`[id="${trigger?.getAttribute('aria-controls')}"]`)
     expect(menu).not.toBeNull()

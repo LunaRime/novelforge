@@ -4,13 +4,15 @@
  * 配置文件：~/.novelforge/mcp_config.json（Claude Desktop 兼容格式）
  */
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Plug, Unplug, Server } from 'lucide-react'
+import { Trash2, Plug, Unplug, Server } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { useSettingsDirty } from './settings-dirty'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import { EmptyState } from '../ui/EmptyState'
 import { Input } from '../ui/Input'
+import { Button } from '../ui/Button'
+import { CreateIcon } from '../ui/ActionIcons'
 import { useTranslation } from '../../hooks/useTranslation'
 
 interface MCPServerConfig {
@@ -145,31 +147,22 @@ export default function MCPSettings() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 顶部操作栏 */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)] flex-shrink-0">
-        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-          {t('settings.mcp')}
-          <span className="ml-2 text-xs opacity-50" style={{ color: 'var(--color-text-muted)' }}>
-            {servers.length}
-          </span>
+    <section className="nf-settings-panel space-y-3">
+      <header className="nf-settings-resource-bar">
+        <span className="rounded-md bg-[var(--color-editor-bg)] px-2 py-1 text-xs tabular-nums text-[var(--color-text-secondary)]" aria-label={t('settings.mcp')}>
+          {servers.length}
         </span>
-        <button
-          type="button"
-          onClick={() => setShowAdd(v => !v)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
-          style={{ color: '#fff', backgroundColor: 'var(--color-accent)' }}
-        >
-          <Plus size={12} />
+        <Button type="button" className="min-h-8" aria-expanded={showAdd} onClick={() => setShowAdd(v => !v)}>
+          <CreateIcon size={14} />
           {t('mcp.addServer')}
-        </button>
-      </div>
+        </Button>
+      </header>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {/* 推荐 MCP（零代码生态：点击一键填充添加表单——插件市场 a/c 型） */}
+      <div className="space-y-3">
+        {/* 选中推荐项只预填表单，添加与连接仍由各自的操作触发。 */}
         <div
           className="p-3 rounded-xl border"
-          style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+          style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-editor-bg)' }}
         >
           <div className="text-micro font-semibold mb-2" style={{ color: 'var(--color-text-muted)' }}>
             {t('mcp.recommended')}
@@ -275,8 +268,7 @@ export default function MCPSettings() {
             return (
               <div
                 key={server.id}
-                className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border"
-                style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+                className="flex flex-wrap items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] px-3 py-2"
               >
                 <Server size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
                 <div className="flex-1 min-w-0">
@@ -292,38 +284,37 @@ export default function MCPSettings() {
                       {st.text}
                     </span>
                   </div>
-                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }}>
+                  <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }} title={[server.command, ...(server.args ?? [])].join(' ')}>
                     {server.command} {server.args?.join(' ') ?? ''}
                   </p>
                 </div>
                 {/* 连接/断开 */}
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  className="min-h-8 shrink-0"
                   onClick={() => isConnected ? handleDisconnect(server.id) : handleConnect(server)}
-                  className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-micro transition-colors cursor-pointer"
-                  style={{
-                    color: isConnected ? 'var(--color-text-secondary)' : 'var(--color-accent)',
-                    backgroundColor: isConnected ? 'var(--color-hover)' : 'rgba(var(--color-accent-rgb), 0.1)',
-                  }}
                 >
                   {isConnected ? <Unplug size={10} /> : <Plug size={10} />}
                   {isConnected ? t('mcp.disconnect') : t('mcp.connect')}
-                </button>
+                </Button>
                 {/* 删除 */}
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
+                  size="icon"
                   onClick={() => handleRemove(server)}
-                  className="flex-shrink-0 p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-[var(--color-hover)]"
-                  style={{ color: 'var(--color-text-muted)' }}
+                  className="size-[32px] shrink-0"
                   title={t('action.delete')}
+                  aria-label={`${t('action.delete')} ${server.name}`}
                 >
-                  <Trash2 size={13} />
-                </button>
+                  <Trash2 size={14} aria-hidden="true" />
+                </Button>
               </div>
             )
           })
         )}
       </div>
-    </div>
+    </section>
   )
 }

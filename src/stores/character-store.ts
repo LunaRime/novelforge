@@ -9,6 +9,7 @@ import type { CharacterTemplate } from '../services/characters/character-templat
 
 export type CharacterCurrentState = CharacterStateData
 export type CharacterCard = CharacterData
+export type CharacterView = 'edit' | 'state' | 'graph' | 'backlinks'
 
 export const EMPTY_CARD: CharacterCard = {
   name: '', role: 'supporting', gender: '', age: '',
@@ -43,6 +44,7 @@ export function groupByTier(chars: CharacterCard[]): Record<number, CharacterCar
 interface CharacterState {
   characters: CharacterCard[]
   selectedName: string | null
+  view: CharacterView
   saving: boolean
   loaded: boolean
   /** 是否有未保存的编辑（刷新/切项目前用于确认，P3 修复） */
@@ -58,6 +60,7 @@ interface CharacterState {
   load: (force?: boolean) => Promise<void>
   reset: () => void
   setSelectedName: (name: string | null) => void
+  setView: (view: CharacterView) => void
   addCharacter: () => void
   deleteCharacter: (name: string, projectPath?: string) => Promise<void>
   updateField: <K extends keyof CharacterCard>(name: string, key: K, value: CharacterCard[K]) => void
@@ -180,6 +183,7 @@ function projectMergedCharacters(initial: CharacterState, latest: CharacterCard[
 export const useCharacterStore = create<CharacterState>()((set, get) => ({
   characters: [],
   selectedName: null,
+  view: 'edit',
   saving: false,
   loaded: false,
   dirty: false,
@@ -199,7 +203,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
       return
     }
     const seq = ++loadSeq
-    if (!sameSource) set({ characters: [], baseline: [], selectedName: null, dirty: false, renameMap: {}, loaded: false, source, writeScope: null })
+    if (!sameSource) set({ characters: [], baseline: [], selectedName: null, view: 'edit', dirty: false, renameMap: {}, loaded: false, source, writeScope: null })
     const editing = get().characters
     try {
       const snapshot = await readCharacterEdits(source)
@@ -226,10 +230,11 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
 
   reset: () => {
     ++loadSeq
-    set({ characters: [], selectedName: null, saving: false, loaded: false, dirty: false, renameMap: {}, baseline: [], source: null, writeScope: null, mergingNames: [] })
+    set({ characters: [], selectedName: null, view: 'edit', saving: false, loaded: false, dirty: false, renameMap: {}, baseline: [], source: null, writeScope: null, mergingNames: [] })
   },
 
   setSelectedName: (name) => set({ selectedName: name }),
+  setView: (view) => set({ view }),
 
   addCharacter: () => {
     // 角色名是唯一主键：默认名用 i18n 文案 + 数字序号去重（#29——此前硬编码中文
@@ -250,6 +255,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
     set((s) => ({
       characters: [...s.characters, newCard],
       selectedName: newCard.name,
+      view: 'edit',
       dirty: true,
     }))
   },

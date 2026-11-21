@@ -5,6 +5,7 @@ import { useAgentStore } from '../../../stores/agent-store'
 import { shouldWarnFidelity } from '../../../services/agent/ccr-fidelity'
 import { localeVariants, t } from '../../../shared/locale'
 import { Button } from '../../ui/Button'
+import { SemanticLabel } from '../../ui/SemanticLabel'
 
 /**
  * 回执段的起始标记（B5：回执头插在摘要里，展示时拆出来独立成段）。
@@ -123,14 +124,14 @@ export default function CompressedBatchCard({ batch, summaryStale = false }: {
           {batch.invalidated && ` · ${t('ccr.batchInvalidated')}`}
           {/* P1-2：保真告警标注（只标注不拦截——历史仍按降幅判定正常替换） */}
           {batch.fidelity && shouldWarnFidelity(batch.fidelity) && (
-            <span title={t('ccr.fidelityWarn')
+            <span className="ms-1.5" title={t('ccr.fidelityWarn')
               .replace('{retained}', String(batch.fidelity.retained))
               .replace('{extracted}', String(batch.fidelity.extracted))}
               style={{ color: 'var(--color-warning)' }}
             >
-              {` · ⚠ ${t('ccr.fidelityBadge')
+              <SemanticLabel name="warning">{t('ccr.fidelityBadge')
                 .replace('{retained}', String(batch.fidelity.retained))
-                .replace('{extracted}', String(batch.fidelity.extracted))}`}
+                .replace('{extracted}', String(batch.fidelity.extracted))}</SemanticLabel>
             </span>
           )}
           <span className="ml-1" style={{ color: 'var(--color-accent)' }}>

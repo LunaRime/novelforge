@@ -1,12 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Plus, Settings2, Trash2, Zap } from 'lucide-react'
+import { Server, Settings2, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useLLMStore } from '../../stores/llm-store'
 import { isModelOfAccount } from '../../shared/provider-accounts'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import type { ModelProfile, ProviderAccount } from '../../shared/ipc-channels'
+import { getCurrentLocale } from '../../shared/locale'
 import { renderLog } from '../../services/render-logger'
 import { Button } from '../ui/Button'
+import { CreateIcon } from '../ui/ActionIcons'
+import { SortSelect } from '../ui/SortSelect'
+import CountBadge from '../ui/CountBadge'
 import MenuRow from '../ui/MenuRow'
 import { Spinner } from '../ui/Spinner'
 import { confirm } from '../ui/Confirm'
@@ -16,6 +20,8 @@ import { ProviderEditorCard } from './ProviderEditorCard'
 import { AddProviderCard } from './AddProviderCard'
 import { OrphanRows } from './OrphanRows'
 import { blockingReferences } from './model-references'
+
+type ModelSort = 'configured' | 'name' | 'modelCount'
 
 /** 行的显示名：自定义显示名 → 预设名 → provider id 兜底 */
 function displayNameOf(account: ProviderAccount): string {
@@ -27,7 +33,7 @@ function displayNameOf(account: ProviderAccount): string {
 /**
  * ProviderRowList —— 供应商**行列表**（模型管理 v3 §2.1/§2.2，2026-10-01）。
  *
- * 行 = 名称 +（`自定义` 标签）+ 凭据灯 + [编辑][删除]（行片 32px 几何，`ui/MenuRow` 唯一实现）。
+ * 行 = 名称 +（`自定义` 标签）+ 模型数 + 凭据灯 + [编辑][删除]。
  * 点「编辑」（或行片主按钮）→ 该行**下方行内展开**编辑卡，一次只开一张（`editingId`）。
  * 切换行时若当前卡有未保存改动 → 先确认（`model.discardEdit`，v2 同款语义）。
  *
@@ -36,8 +42,7 @@ function displayNameOf(account: ProviderAccount): string {
  *
  * 本列表还承载三个区块（T9 + 2026-10-01 版位/形态调整）：**无归属条目行组**（`orphans` prop，
  * `OrphanRows` —— 与供应商行同款行卡、**并入主列表**，渲染在行列表之后、添加块之前）、**添加卡**
- * （`AddProviderCard`，与行列表并存而非替换 —— 见下）与**首次运行的空态**（无账户且无条目时；
- * 它的按钮与底部按钮是同一个开关）。
+ * （`AddProviderCard`，与行列表并存）与**首次运行的空态**（无账户且无条目时）。
  *
  * store 驱动：行的一切自持；唯一 prop 是容器算好的 `orphans`（数据在容器、版位在本列表）。
  */
@@ -54,13 +59,30 @@ export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [sort, setSort] = useState<ModelSort>('configured')
   /** 保存成功的播报文案（spec §2.7 的 aria-live；名字取 reload 后的那一行） */
   const [savedName, setSavedName] = useState<string | null>(null)
+  const returnToAddButton = useRef(false)
   /**
    * 打开中的卡是否有未保存改动 —— 由卡片上报（`ProviderEditorCard.onDirtyChange`）。
    * 用 ref 而不是 state：它只在「切换行」这一瞬间被读一次，进 state 只会白白多一轮渲染。
    */
   const dirtyRef = useRef(false)
+
+  const closeAdd = useCallback(() => {
+    returnToAddButton.current = true
+    setAdding(false)
+  }, [])
+
+  const focusAddButton = useCallback((button: HTMLButtonElement | null) => {
+    if (!button || !returnToAddButton.current) return
+    returnToAddButton.current = false
+    button.focus()
+  }, [])
+
+  const focusAddCard = useCallback((card: HTMLDivElement | null) => {
+    card?.querySelector('button')?.focus()
+  }, [])
 
   // 设置段打开时批量拉一次凭据状态（三态灯的数据源）；失败只降级成无灯，不打扰用户
   useEffect(() => { void describeCredentials() }, [describeCredentials])
@@ -148,10 +170,10 @@ export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
 
   /** 添加成功后：收起添加卡 + 播报「已保存 {name}」（名字取**重载后**的那一行，同编辑卡口径） */
   const announceAdded = useCallback((accountId: string) => {
-    setAdding(false)
+    closeAdd()
     const fresh = useLLMStore.getState().providers.find((p) => p.id === accountId)
     if (fresh) setSavedName(displayNameOf(fresh))
-  }, [])
+  }, [closeAdd])
 
   /**
    * 打开添加卡 —— 与 `openEditor` 同口径先清上一条播报。
@@ -163,114 +185,135 @@ export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
     setAdding(true)
   }, [])
 
-  /**
-   * 空态（无账户且无任何条目 = 首次运行的「保留空态」，v3 §2.4）。
-   *
-   * ⚠️ 它住在行列表里而不是容器（`ModelListSection`）里：添加入口**只有一个**、
-   * `adding` 状态也就只有一处 —— 空态的按钮与列表底部的按钮是同一个开关。
-   */
+  // 空态和列表页头共用添加状态。排序只重排显示行，账号与草稿仍按 id 对应。
   const isEmpty = providers.length === 0 && models.length === 0
+  const rows = providers.map((account) => ({
+    account,
+    name: displayNameOf(account),
+    modelCount: models.filter((model) => isModelOfAccount(model.id, account.id)).length,
+  }))
+  if (sort !== 'configured') {
+    const byName = new Intl.Collator(getCurrentLocale(), { numeric: true })
+    rows.sort((a, b) => (sort === 'modelCount' ? b.modelCount - a.modelCount : 0)
+      || byName.compare(a.name, b.name))
+  }
 
   return (
-    <div>
+    <div className="space-y-3">
       {/* 保存成功播报（spec §2.7）：视觉上不打扰，读屏可闻 */}
       <span role="status" aria-live="polite" className="sr-only">
         {savedName ? t('model.savedNotice').replace('{name}', () => savedName) : ''}
       </span>
+      <header className="nf-settings-resource-bar">
+        <div className="min-w-0">
+          <h4 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+            <Server size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
+            {t('model.accountsTitle')}
+          </h4>
+          <p className="mt-0.5 text-micro text-[var(--color-text-secondary)]">
+            {t('model.configuredCount').replace('{n}', String(models.length))}
+          </p>
+        </div>
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {rows.length + (orphans?.length ?? 0) > 1 && (
+            <SortSelect<ModelSort> label={t('model.sortLabel')} value={sort} onChange={setSort} items={[
+              { value: 'configured', label: t('model.sortConfigured') },
+              { value: 'name', label: t('model.sortName') },
+              { value: 'modelCount', label: t('model.sortModelCount') },
+            ]} />
+          )}
+          {!isEmpty && !adding && (
+            <Button ref={focusAddButton} type="button" size="lg" onClick={openAdd}>
+              <CreateIcon size={14} />
+              {t('provider.addVendor')}
+            </Button>
+          )}
+        </div>
+      </header>
 
-      {providers.map((account) => {
-        const ref = account.apiKeyRef
-        const name = displayNameOf(account)
-        const isCustom = account.provider === 'custom'
-        return (
-          <div key={account.id}>
-            {/* 行卡片壳（2026-10-01 用户要求）：与「其他」卡 / 编辑卡 / 添加卡同族的圆角描边
-                （行片本身只有 hover 底色，单看与卡片家族不统一）。展开的编辑卡仍是独立的 accent 描边卡。 */}
-            <div
-              className="rounded-xl overflow-hidden mx-1 mb-1.5"
-              style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-            >
-            <MenuRow
-              title={name}
-              titleSuffix={isCustom ? (
-                <span
-                  className="text-2xs px-1 py-0.5 rounded flex-shrink-0"
-                  style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}
-                >
-                  {t('model.providerCustom')}
-                </span>
-              ) : undefined}
-              count={ref ? <CredentialDot info={credentialInfo[ref]} refName={ref} /> : undefined}
-              onPrimary={() => void openEditor(account.id)}
-              titleHint={t('action.edit')}
-              actions={
-                <div className="flex items-center gap-1 pr-1">
-                  <button
-                    type="button"
-                    onClick={() => void openEditor(account.id)}
-                    title={t('action.edit')}
-                    aria-label={t('action.edit')}
-                    className="flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-                    style={{ width: 32, height: 32 }}
-                  >
-                    <Settings2 size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleDelete(account)}
-                    disabled={deletingId === account.id}
-                    title={t('provider.delete')}
-                    aria-label={t('provider.delete')}
-                    className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(var(--color-error-rgb),0.1)] text-[var(--color-text-muted)] hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
-                    style={{ width: 32, height: 32 }}
-                  >
-                    {deletingId === account.id ? <Spinner size={14} /> : <Trash2 size={14} />}
-                  </button>
-                </div>
-              }
-            />
+      {/* 添加卡和行列表同时挂载，保留已打开的编辑草稿。 */}
+      {adding && (
+        <div ref={focusAddCard}>
+          <AddProviderCard onCancel={closeAdd} onDone={announceAdded} />
+        </div>
+      )}
+
+      <div className="space-y-2">
+        {rows.map(({ account, name, modelCount }) => {
+          const ref = account.apiKeyRef
+          const isCustom = account.provider === 'custom'
+          return (
+            <div key={account.id} className="space-y-2">
+              <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-1">
+                <MenuRow
+                  icon={<Server size={14} className="shrink-0 text-[var(--color-text-secondary)]" aria-hidden="true" />}
+                  title={name}
+                  titleSuffix={isCustom ? (
+                    <span className="shrink-0 rounded bg-[var(--color-hover)] px-1 py-0.5 text-2xs text-[var(--color-text-secondary)]">
+                      {t('model.providerCustom')}
+                    </span>
+                  ) : undefined}
+                  count={(
+                    <span className="flex items-center gap-2">
+                      <CountBadge value={t('model.accountModelCount').replace('{n}', String(modelCount))} />
+                      {ref && <CredentialDot info={credentialInfo[ref]} refName={ref} />}
+                    </span>
+                  )}
+                  active={editingId === account.id}
+                  onPrimary={() => void openEditor(account.id)}
+                  titleHint={t('model.editConfig').replace('{name}', () => name)}
+                  actions={
+                    <div className="flex items-center gap-1 pr-1">
+                      <button
+                        type="button"
+                        onClick={() => void openEditor(account.id)}
+                        title={t('action.edit')}
+                        aria-label={t('action.edit')}
+                        className="flex items-center justify-center rounded-lg text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]"
+                        style={{ width: 32, height: 32 }}
+                      >
+                        <Settings2 size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void handleDelete(account)}
+                        disabled={deletingId === account.id}
+                        title={t('provider.delete')}
+                        aria-label={t('provider.delete')}
+                        className="flex items-center justify-center rounded-lg text-[var(--color-text-muted)] transition-colors hover:bg-[rgba(var(--color-error-rgb),0.1)] hover:text-[var(--color-error)] disabled:cursor-not-allowed disabled:opacity-50"
+                        style={{ width: 32, height: 32 }}
+                      >
+                        {deletingId === account.id ? <Spinner size={14} /> : <Trash2 size={14} aria-hidden="true" />}
+                      </button>
+                    </div>
+                  }
+                />
+              </div>
+              {editingId === account.id && (
+                <ProviderEditorCard
+                  account={account}
+                  revision={providersRevision}
+                  keyInfo={ref ? credentialInfo[ref] : undefined}
+                  onClose={closeEditor(account)}
+                  onDirtyChange={(dirty) => { dirtyRef.current = dirty }}
+                />
+              )}
             </div>
-            {editingId === account.id && (
-              <ProviderEditorCard
-                account={account}
-                revision={providersRevision}
-                keyInfo={ref ? credentialInfo[ref] : undefined}
-                onClose={closeEditor(account)}
-                onDirtyChange={(dirty) => { dirtyRef.current = dirty }}
-              />
-            )}
-          </div>
-        )
-      })}
+          )
+        })}
+        {orphans && orphans.length > 0 && <OrphanRows models={orphans} sortByName={sort === 'name'} />}
+      </div>
 
-      {/* 无归属手工条目（2026-10-01 用户要求**并入主列表**）：与供应商行同款行卡并列在行列表之后、
-          添加块之前；「其他（无归属）」容器取消（OrphanRows）。 */}
-      {orphans !== undefined && orphans.length > 0 && <OrphanRows models={orphans} />}
-
-      {/* 添加卡（v3 §2.3）：**替换按钮、不替换行列表** —— 打开它不会卸载任何已展开的编辑卡，
-          那条「点了添加就丢掉未保存草稿」的路径（T6 评审 Minor ①）到此封死。 */}
-      {adding ? (
-        <div className="pt-3">
-          <AddProviderCard onCancel={() => setAdding(false)} onDone={announceAdded} />
-        </div>
-      ) : isEmpty ? (
-        <div
-          className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl"
-          style={{ border: '1.5px dashed var(--color-border)' }}
-        >
-          <Zap size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
-          <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-            {t('model.noLabelConfig').replace('{label}', '')}
+      {isEmpty && !adding && (
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-editor-bg)] px-4 py-8 text-center">
+          <span className="grid size-10 place-items-center rounded-lg bg-[var(--color-panel)] text-[var(--color-accent)]">
+            <Server size={18} aria-hidden="true" />
           </span>
-          <Button size="sm" variant="outline" onClick={openAdd}>
-            <Plus size={13} />
-            {t('provider.addVendor')}
-          </Button>
-        </div>
-      ) : (
-        <div className="flex items-center px-1 pt-3">
-          <Button size="sm" variant="outline" onClick={openAdd}>
-            <Plus size={13} />
+          <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {t('model.noConfig')}
+          </span>
+          <Button ref={focusAddButton} type="button" className="min-h-8" onClick={openAdd}>
+            <CreateIcon size={14} />
             {t('provider.addVendor')}
           </Button>
         </div>

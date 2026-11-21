@@ -25,6 +25,8 @@ import { act } from 'react'
 import VectorConfigSection from './VectorConfigSection'
 import { t } from '../../shared/locale'
 import type { LocalEmbeddingConfig } from '../../shared/ipc-channels'
+import { ipc } from '../../services/ipc-client'
+import { useVectorConfigStore } from '../../stores/vector-config-store'
 
 // ===== IPC 桩（组件与 store 共用同一 mock 模块）=====
 
@@ -184,6 +186,37 @@ function setConfigCalls(): unknown[][] {
 function listModelsCalls(): unknown[][] {
   return mocks.invoke.mock.calls.filter((c) => c[0] === 'embedding:local-list-models')
 }
+
+const localProgressStatus = `section[aria-label="${t('localEmbedding.title')}"] [role="status"]`
+
+describe('向量连通性测试', () => {
+  it('播报测试进度，并将未配置的 Embedding API 与 LLM 标记为未测试', async () => {
+    const isElectron = ipc.isElectron
+    Object.defineProperty(ipc, 'isElectron', { value: true })
+    useVectorConfigStore.setState({ lastTestResult: null, llmEmbeddingEnabled: false, testing: false })
+    stubLocal({ ok: false })
+    let resolveStats: (value: unknown) => void = () => {}
+    handlers['kb:stats'] = () => new Promise((resolve) => { resolveStats = resolve })
+    handlers['embedding:get-model'] = () => null
+    handlers['kb:search'] = () => []
+    const { container, root } = render()
+    try {
+      click(button(container, t('action.runTest')))
+      expect(container.querySelector('[role="status"]')?.textContent).toContain(t('status.testing'))
+      await act(async () => resolveStats({ documentCount: 1, totalChunks: 2, vectorDimension: 256 }))
+
+      const results = container.querySelector('[aria-label="连通性测试结果"]')
+      expect(results?.textContent?.match(/未测试/g)).toHaveLength(2)
+      expect(results?.textContent).toContain('未配置向量模型')
+      expect(results?.textContent).toContain('LanceDB')
+      expect(button(container, t('action.runTest')).disabled).toBe(false)
+    } finally {
+      await act(async () => root.unmount())
+      useVectorConfigStore.setState({ lastTestResult: null, testing: false })
+      Object.defineProperty(ipc, 'isElectron', { value: isElectron })
+    }
+  })
+})
 
 /**
  * R1 之后模型选择从 Radix Select 改成清单行（单选 + 该行自己的「下载模型」按钮），
@@ -572,13 +605,13 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
       progressHandler?.({ status: 'downloading', completed: 200, total: 100, percent: 150 })
       await new Promise((r) => setTimeout(r, 0))
     })
-    expect(requireEl(container, '[role="status"]').textContent).toContain('100%')
+    expect(requireEl(container, localProgressStatus).textContent).toContain('100%')
 
     await act(async () => {
       progressHandler?.({ status: 'pulling manifest' }) // Ollama 早期帧：只有 status，无 total
       await new Promise((r) => setTimeout(r, 0))
     })
-    const indeterminate = requireEl(container, '[role="status"]').textContent ?? ''
+    const indeterminate = requireEl(container, localProgressStatus).textContent ?? ''
     expect(indeterminate).not.toMatch(/%/)
     expect(indeterminate).toContain('正在下载')
     // T5-Minor 1：模型列表刷新**只**发生在 success 终帧 —— 下载中/不确定态帧都不得触发
@@ -620,7 +653,7 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     click(button(container, DOWNLOAD_LABEL))
     await flush()
     // 发起成功 → 进入「下载中」：按钮 disabled（bug 里会永久停在这个假进行态）
-    expect(requireEl(container, '[role="status"]')).toBeTruthy()
+    expect(requireEl(container, localProgressStatus)).toBeTruthy()
     expect(button(container, DOWNLOAD_LABEL).disabled).toBe(true)
 
     const raw = 'Ollama /api/pull failed: HTTP 500 {"error":"manifest unavailable"}'
@@ -630,7 +663,7 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     })
 
     // ① 进度条收掉（不再停在最后一帧）② 按钮恢复可点（用户唯一的主动作可以重试）
-    expect(query(container, '[role="status"]')).toBeNull()
+    expect(query(container, localProgressStatus)).toBeNull()
     expect(button(container, DOWNLOAD_LABEL).disabled).toBe(false)
     // ③ 主文案走 t()（U4：英文技术串不得当主文案）④ 原始串只在 <details> 里
     expect(textOutsideDetails(container)).toContain(t('localEmbedding.pullFailed'))
@@ -656,7 +689,7 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     expect(textOutsideDetails(container)).not.toContain(raw)
     expect(query(container, 'details')?.textContent).toContain(raw)
     // ③ started:false → **从未**进入 pulling 态：进度条不存在、按钮保持可点（用户可重试）
-    expect(query(container, '[role="status"]')).toBeNull()
+    expect(query(container, localProgressStatus)).toBeNull()
     expect(button(container, DOWNLOAD_LABEL).disabled).toBe(false)
     act(() => { root.unmount() })
   })

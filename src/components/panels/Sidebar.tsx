@@ -7,8 +7,10 @@
  */
 
 import { useState, useEffect, useContext, useLayoutEffect, useRef } from 'react'
-import { X } from 'lucide-react'
+import { BookOpen, FolderOpen, Home, Settings, Users, X } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layout-store'
+import { useProjectStore } from '../../stores/project-store'
+import { Button } from '../ui/Button'
 import { ContextMenu } from '../ui/ContextMenu'
 import { useTranslation } from '../../hooks/useTranslation'
 import KnowledgePanel from './KnowledgePanel'
@@ -25,6 +27,7 @@ import {
 export default function Sidebar() {
   const { t } = useTranslation()
   const sidebarView = useLayoutStore(s => s.sidebarView)
+  const hasProject = useProjectStore(s => Boolean(s.currentProject))
   const navigation = useContext(NavigationSessionContext)
   const scrollRef = useRef<HTMLDivElement>(null)
   const toggleSidebar = useLayoutStore(s => s.toggleSidebar)
@@ -42,7 +45,7 @@ export default function Sidebar() {
     if (!pane || sidebarView !== 'project' || !navigation) return
     const target = navigation.readScrollTop()
     pane.scrollTop = target
-    // The binder or draft projection may arrive after the first layout.
+    // 卷目录和草稿列表可能异步到达，等内容够长后恢复滚动位置。
     const tree = pane.firstElementChild
     if (!tree || pane.scrollTop >= target) return
     const observer = new ResizeObserver(() => {
@@ -53,42 +56,42 @@ export default function Sidebar() {
     return () => observer.disconnect()
   }, [navigation, sidebarView])
 
-  const viewTitles: Record<string, string> = {
-    home:       t('nav.home'),
-    project:    t('nav.projectTree'),
-    knowledge:  t('nav.knowledgeBase'),
-    characters: t('nav.characters'),
+  const views = {
+    home:       [Home, t('nav.home')],
+    project:    [FolderOpen, t('nav.projectTree')],
+    knowledge:  [BookOpen, t('nav.knowledgeBase')],
+    characters: [Users, t('nav.characters')],
+    settings:   [Settings, t('settings.title')],
+    } as const
+  const [ViewIcon, viewTitle] = views[sidebarView] ?? views.home
+  function closeSidebar() {
+    toggleSidebar()
+    document.querySelector<HTMLButtonElement>('[data-workbench-toggle="sidebar"]')?.focus()
   }
+  const hasContentHeader = hasProject && (sidebarView === 'characters' || sidebarView === 'knowledge')
+  const closeAction = (
+    <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
+      onClick={closeSidebar} title={t('tip.closePanel')} aria-label={t('tip.closePanel')}>
+      <X size={15} aria-hidden="true" />
+    </Button>
+  )
 
   return (
-    <div
-      className="w-full h-full flex flex-col overflow-hidden"
-      style={{
-        backgroundColor: 'var(--color-sidebar)',
-        // 朝向缓冲带的一侧不再画 1px 边框：那条线正好压在缓冲带边上，会变回「一根线」（见 novel-editor.css [data-separator]）
-      }}
-    >
-      <div className="panel-header">
-        <span>{viewTitles[sidebarView]}</span>
-        <span className="flex-1" />
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          title={t('tip.closePanel')}
-          aria-label={t('tip.closePanel')}
-          className="icon-btn"
-          style={{ width: 18, height: 18 }}
-        >
-          <X size={12} strokeWidth={1.5} />
-        </button>
-      </div>
-      <div ref={scrollRef} data-v3-density-list className="flex-1 overflow-y-auto py-1 min-h-0" onScroll={event => {
+    <div className="nf-sidebar">
+      {!hasContentHeader && (
+        <header className="nf-sidebar-heading">
+          <ViewIcon size={16} aria-hidden="true" />
+          <h2 className="min-w-0 flex-1 truncate" title={viewTitle}>{viewTitle}</h2>
+          {closeAction}
+        </header>
+      )}
+      <div ref={scrollRef} data-v3-density-list className={hasContentHeader ? 'flex-1 min-h-0 overflow-hidden' : 'flex-1 min-h-0 overflow-y-auto'} onScroll={event => {
         if (sidebarView === 'project') navigation?.saveScrollTop(event.currentTarget.scrollTop)
       }}>
         {sidebarView === 'home'       && <HomeSidebarPanel />}
         {sidebarView === 'project'    && <ProjectTree />}
-        {sidebarView === 'knowledge'  && <KnowledgePanel />}
-        {sidebarView === 'characters' && <CharactersView />}
+        {sidebarView === 'knowledge'  && <KnowledgePanel headerAction={closeAction} />}
+        {sidebarView === 'characters' && <CharactersView headerAction={closeAction} />}
       </div>
 
       {/* 动态右键菜单 */}

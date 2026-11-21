@@ -7,7 +7,7 @@ vi.mock('./draft-snapshot-service', () => ({ maybeCreateAutoSnapshot: vi.fn() })
 vi.mock('../utils/logger', () => ({ logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 import { getProjectDb } from '../database'
 import { maybeCreateAutoSnapshot } from './draft-snapshot-service'
-import { commitDatabaseDraft, commitDatabaseDraftFinalization } from './draft-write-service'
+import { commitDatabaseDraft, commitDatabaseDraftFinalization, commitDatabaseFinalizedUnderline } from './draft-write-service'
 import { DraftRepository } from '../repositories/draft-repository'
 import { captureProjectWriteScope } from './project-write-scope'
 
@@ -119,4 +119,22 @@ test('rejects a finalization from a replaced connection at the same path', () =>
     success: false, error: 'project-scope-changed',
   })
   expect(db.prepare('SELECT status FROM drafts WHERE id=1').get()?.status).toBe('draft')
+})
+
+test('正式稿只保存匹配当前正文的下划线标记，保留定稿状态、字数和内容身份', () => {
+  db.exec("UPDATE drafts SET status='finalized'")
+  const command = { projectPath: '/project', draftId: 1, expectedContent: 'old', content: '<u>old</u>' }
+  expect(commitDatabaseFinalizedUnderline({ ...command, projectPath: '/other' }).success).toBe(false)
+  expect(commitDatabaseFinalizedUnderline({ ...command, writeToken: 'stale' }).success).toBe(false)
+  expect(commitDatabaseFinalizedUnderline({ ...command, content: '`<u>old</u>`' }).success).toBe(false)
+  expect(commitDatabaseFinalizedUnderline({ ...command, content: '<u>new</u>' }).success).toBe(false)
+  expect(commitDatabaseFinalizedUnderline(command)).toEqual({ success: true, chapterNumber: 1 })
+  expect(db.prepare('SELECT body FROM contents WHERE id=1').get()?.body).toBe('<u>old</u>')
+  expect(db.prepare('SELECT status, word_count, content_id, content_hash FROM drafts WHERE id=1').get()).toEqual({
+    status: 'finalized', word_count: 3, content_id: 1, content_hash: hash('<u>old</u>'),
+  })
+  expect(commitDatabaseFinalizedUnderline(command)).toMatchObject({ success: false, conflict: true })
+  expect(commitDatabaseFinalizedUnderline({ ...command, expectedContent: '<u>old</u>', content: 'old' }).success).toBe(true)
+  db.exec("UPDATE drafts SET status='archived'")
+  expect(commitDatabaseFinalizedUnderline(command).success).toBe(false)
 })

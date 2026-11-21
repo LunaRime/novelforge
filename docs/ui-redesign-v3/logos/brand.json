@@ -2,8 +2,9 @@
   "name": "NovelForge",
   "concept": "折页与火种 / A page. A spark.",
   "date": "2026-11-18",
-  "status": "design-proposal-only",
-  "scope": "docs/ui-redesign-v3/logos；不替换生产图标或现有 v3 原型图标。",
+  "status": "production-adopted",
+  "adoptedAt": "2026-11-20",
+  "scope": "唯一设计主稿；生产图标由 scripts/sync-brand-icons.mjs 同步为 build/icon.png|ico|icns，应用窗口、安装包、启动首帧、标题栏与欢迎页共用。",
   "master": "novelforge-icon.svg",
   "palette": {
     "brand": "#405c47",
@@ -25,7 +26,8 @@
     "transparentPng": "novelforge-mark-1024.png",
     "previewPage": "index.html",
     "previewImage": "novelforge-preview.png",
-    "generatedReference": "Design_one_refined_professiona_2026-11-18T05-14-26.png"
+    "generatedReference": "Design_one_refined_professiona_2026-11-18T05-14-26.png",
+    "syncScript": "scripts/sync-brand-icons.mjs"
   },
   "pngSizes": [16, 24, 32, 48, 64, 128, 256, 512, 1024],
   "icoSizes": [16, 24, 32, 48, 64, 128, 256],

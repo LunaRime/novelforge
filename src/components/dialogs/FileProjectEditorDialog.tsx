@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
@@ -6,6 +7,8 @@ import { inferFileImport, inferFileImportBlueprints, type FileImportBlueprintInf
 import type { FileAgentEditProposal, FileDraftCommand, FileImportChapter, FileImportSettingField, ProjectChannels } from '../../shared/ipc-channels'
 import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
+import MarkdownContent from '../ui/MarkdownContent'
+import MarkdownField from '../ui/MarkdownField'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
 import { VersionActions, type VersionAction } from '../editor/VersionActions'
@@ -90,7 +93,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   }
 
   function display(path: string, result: Opened, preferred: string, requested: string[]) {
-    // A preview belongs to the previous document and revision, even if the locator stayed the same.
+    // 预览绑定到旧文档版本，重新打开相同定位符时也要清除。
     setPreview(undefined)
     setRecovery(undefined)
     setIndexPending(previous => workspace?.path === path && previous)
@@ -480,22 +483,22 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       {showTrigger && <DialogTrigger asChild><Button variant="outline" className="w-full">{t('project.fileEditor')}</Button></DialogTrigger>}
-      <DialogContent preventOutsideClose className="flex max-h-[85vh] max-w-3xl flex-col">
-        <DialogHeader>
-          <DialogTitle>{t('project.fileEditor')}</DialogTitle>
+      <DialogContent preventOutsideClose className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden">
+        <DialogHeader className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-editor-bg)]">
+          <DialogTitle className="text-base">{t('project.fileEditor')}</DialogTitle>
           <DialogDescription>{t('project.fileEditorDescription')}</DialogDescription>
         </DialogHeader>
-        <div className="flex min-h-0 flex-col gap-3 overflow-auto p-4" aria-busy={busy}>
-          <Button variant="outline" disabled={busy || dirty} onClick={() => void load()}>{t('project.fileEditorChoose')}</Button>
+        <div className="flex min-h-0 flex-col gap-3 overflow-auto bg-[var(--color-panel)] p-4" aria-busy={busy}>
+          <Button variant="outline" className="w-fit" disabled={busy || dirty} onClick={() => void load()}>{t('project.fileEditorChoose')}</Button>
           {workspace && recovery && (
             <div className="flex flex-col gap-2">
               <p role="status">{t(recovery.committed ? 'project.fileEditorReloadFailed' : 'project.fileEditorOperationFailed')}</p>
               <Button type="button" variant="outline" disabled={busy} onClick={() => void load(workspace.path, recovery.locator)}>
                 {t('action.retry')}
               </Button>
-              <textarea aria-label={t('project.fileEditorBody')} rows={10} readOnly value={text}
+              <MarkdownField startInEdit aria-label={t('project.fileEditorBody')} rows={10} readOnly value={text}
                 className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3" />
-              {preview && <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border border-[var(--color-border)] p-3">{preview.content}</pre>}
+              {preview && <div className="max-h-48 overflow-auto rounded border border-[var(--color-border)] p-3"><MarkdownContent content={preview.content} document /></div>}
             </div>
           )}
           {workspace && !recovery && (
@@ -545,7 +548,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                       {settingsOffer?.occupied.includes(field) && <p className="text-sm">{t('project.fileEditorSettingOccupied')}</p>}
                       {!settingsOffer?.available.includes(field) && <p className="text-sm">{t('project.fileEditorSettingPreviewOnly')}</p>}
                       {inferencePreview.applied?.includes(field) && <p className="text-sm">{t('project.fileEditorSettingApplied')}</p>}
-                      <p className="whitespace-pre-wrap break-words text-sm">{inferencePreview.values[field]}</p>
+                      <div className="text-sm"><MarkdownContent content={inferencePreview.values[field] ?? ""} document /></div>
                     </div>
                   ))}
                   {canApplySettings && (
@@ -619,13 +622,14 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                 </label>
               )}
               {active && (
-                <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void save() }}>
-                  <textarea aria-label={t('project.fileEditorBody')} rows={14} value={text} readOnly={active.readOnly || (busy && !savingBody)}
+                <form className="flex flex-col gap-2" onKeyDown={event => handleSaveShortcut(event, () => save(), !busy && dirty && !active.readOnly)}
+                  onSubmit={event => { event.preventDefault(); void save() }}>
+                  <MarkdownField startInEdit aria-label={t('project.fileEditorBody')} rows={14} value={text} readOnly={active.readOnly || (busy && !savingBody)}
                     onChange={event => {
                       if (inferenceRun.current || inferencePreview || blueprintPreview) clearInference()
                       setText(event.target.value)
                     }}
-                    className="resize-y rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3" />
+                    className="[field-sizing:content] min-h-64 max-h-[65vh] resize-none overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-4 font-[family-name:var(--font-writing)] text-base leading-relaxed shadow-[var(--shadow-sm)]" />
                   <div className="flex gap-2">
                     <Button type="submit" disabled={busy || !dirty || active.readOnly}>{t(savingBody ? 'status.saving' : 'action.save')}</Button>
                     {dirty && <Button type="button" variant="outline" disabled={busy} onClick={() => setText(active.content)}>
@@ -650,7 +654,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                       <Button variant="outline" disabled={busy || dirty} onClick={() => void previewRevision()}>{t('project.fileEditorPreview')}</Button>
                     </div>
                   )}
-                  {preview && <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border border-[var(--color-border)] p-3">{preview.content}</pre>}
+                  {preview && <div className="max-h-48 overflow-auto rounded border border-[var(--color-border)] p-3"><MarkdownContent content={preview.content} document /></div>}
                   <VersionActions actions={([
                     { enabled: Boolean(preview), label: 'project.fileEditorMerge', kind: 'merge' },
                     { enabled: lifecycle.canFinalize, label: 'project.fileEditorFinalize', kind: 'finalize' },

@@ -27,7 +27,7 @@ function key(target: HTMLElement, value: string) {
 describe('CommandPalette（Cmd+K）', () => {
   beforeEach(() => {
     useCommandStore.setState({ open: true, mode: 'commands' })
-    useLayoutStore.setState({ newProjectOpen: false, settingsOpen: false, workbenchMode: 'build' })
+    useLayoutStore.setState({ newProjectOpen: false, settingsOpen: false })
     useShortcutStore.getState().resetAll()
   })
 
@@ -70,20 +70,10 @@ describe('CommandPalette（Cmd+K）', () => {
     expect(useCommandStore.getState().open).toBe(false)
   })
 
-  it('从命令面板切换工作模式，并展示生效的自定义绑定', async () => {
-    useShortcutStore.getState().setBinding('toggle-workbench-mode', 'Mod+Alt+M')
+  it('保留专注入口并移除预览模式命令', () => {
     const box = render()
-    const input = box.querySelector('input')!
-    act(() => {
-      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, '写作态')
-      input.dispatchEvent(new Event('input', { bubbles: true }))
-    })
-    await act(async () => {})
-    expect(box.textContent).toContain('切换工作模式')
-    expect(box.textContent).toMatch(/Ctrl\+Alt\+M|⌘⌥M/)
-    key(input, 'Enter')
-    await act(async () => {})
-    expect(useLayoutStore.getState().workbenchMode).toBe('write')
+    expect(box.textContent).toContain('专注写作模式')
+    expect(box.textContent).not.toContain('切换工作模式')
   })
 
   it('关闭时把焦点归还仍挂载的原控件', () => {

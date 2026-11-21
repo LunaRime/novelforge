@@ -6,7 +6,7 @@ import type { ProviderAccount } from '../../shared/ipc-channels'
 import { randomUUID } from '../../utils/id'
 import { Label } from '../ui/Label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { OptionCards } from '../ui/ChoiceControls'
 import { ProviderEditorCard } from './ProviderEditorCard'
 
 type AddProviderMode = 'catalog' | 'custom'
@@ -87,9 +87,9 @@ export interface AddProviderCardProps {
  * 三条语义（v3 §2.3，别在重构里丢）：
  * 1. **切换两模式不丢草稿**：访问过的模式面板一直挂着（`hidden` 而非卸载），各自持有草稿
  *    ——目录与自定义本来就是两份不同的草稿（家 vs 手填端点）。
- * 2. **写入 / 探测中锁定切换**：保存中或候选面板开着时，分段控件禁用（半途换模式会让
+ * 2. **写入 / 探测中锁定切换**：保存中或候选面板开着时，模式选项禁用（半途换模式会让
  *   进行中的那次提交对着一个已经不可见的表单回话）。
- * 3. **只剩一种模式时**不出分段控件，以该模式名为标题直接显示表单（可用集变了也不会露出个
+ * 3. **只剩一种模式时**不出模式选项，以该模式名为标题直接显示表单（可用集变了也不会露出个
  *    点了没反应的档位）。
  *
  * provider 由本卡持有（目录模式的下拉）而**不是**编辑卡：换家要连 protocol/baseUrl 一起重播种，
@@ -118,7 +118,7 @@ export function AddProviderCard({ onCancel, onDone }: AddProviderCardProps) {
   const [customAccount] = useState<ProviderAccount>(() => draftAccountFor('custom'))
 
   const switchMode = (next: AddProviderMode) => {
-    if (busyNow) return // 分段控件已禁用，这里是第二道防线
+    if (busyNow) return // 模式选项已禁用，这里是第二道防线
     setMode(next)
     setVisited((seen) => (seen.includes(next) ? seen : [...seen, next]))
   }
@@ -157,7 +157,7 @@ export function AddProviderCard({ onCancel, onDone }: AddProviderCardProps) {
       </span>
 
       {modes.length > 1 ? (
-        <SegmentedControl
+        <OptionCards
           items={modes.map((m) => ({ value: m, label: modeLabel(m) }))}
           value={mode}
           onChange={switchMode}

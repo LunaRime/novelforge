@@ -43,6 +43,27 @@ afterEach(() => {
 })
 
 describe('GlobalTitleTooltip 全局拦截', () => {
+  it('悬停在图标内部时读取按钮声明的提示', () => {
+    vi.useFakeTimers()
+    const button = document.createElement('button')
+    try {
+      mount()
+      button.dataset.tooltip = '任务'
+      button.dataset.tooltipSide = 'right'
+      button.innerHTML = '<svg><path /></svg>'
+      document.body.appendChild(button)
+      act(() => {
+        button.querySelector('path')!.dispatchEvent(new MouseEvent('mouseover', { bubbles: true }))
+        vi.advanceTimersByTime(450)
+      })
+      expect(document.querySelector('[role="tooltip"]')?.textContent).toBe('任务')
+      expect(button.dataset.tooltip).toBe('任务')
+    } finally {
+      button.remove()
+      vi.useRealTimers()
+    }
+  })
+
   it('子树批量插入：整棵子树的 title 都被提取（React 批量挂载形状——本次修复的漏网）', async () => {
     mount()
     const wrap = document.createElement('div')

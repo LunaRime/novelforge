@@ -50,3 +50,13 @@ describe('MarkdownContent 代码块渲染', () => {
     expect(el.querySelector('code')).toBeTruthy()
   })
 })
+
+it('文档渲染下划线及其中的 Markdown，代码和其他 HTML 仍按文本显示', () => {
+  const el = render(<MarkdownContent document content={'<u>强调 **正文**</u>、`<u>代码</u>`、<u onclick="alert(1)">原文</u>、<img src=x onerror="alert(1)">'} />)
+  expect(el.querySelector('u')).toMatchObject({ textContent: '强调 正文' })
+  expect(el.querySelector('u strong')).toMatchObject({ textContent: '正文' })
+  expect(el.querySelectorAll('u')).toHaveLength(1)
+  expect(el.querySelector('code')).toMatchObject({ textContent: '<u>代码</u>' })
+  expect(el.querySelector('img')).toBeNull()
+  expect(el.textContent).toContain('<u onclick="alert(1)">原文</u>')
+})

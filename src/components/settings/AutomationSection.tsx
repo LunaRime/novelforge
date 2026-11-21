@@ -5,8 +5,9 @@
  * scheduler / executor 的契约一致：targetType + targetRef + triggers[] + defaultActionPolicy。
  */
 import { useEffect, useState } from 'react'
-import { Play, Plus, Trash2 } from 'lucide-react'
+import { CalendarClock, Play, Trash2 } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { CreateIcon } from '../ui/ActionIcons'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Switch } from '../ui/Switch'
@@ -90,14 +91,14 @@ export default function AutomationSection() {
   const trigger = editing?.triggers[0]
 
   return (
-    <div
-      className="rounded-xl p-4 space-y-4"
-      style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-    >
-      <div className="space-y-1">
-        <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+    <section className="nf-settings-panel space-y-3">
+      <header className="nf-settings-resource-bar">
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+          <CalendarClock size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
           {t('automation.settings.title')}
-        </p>
+        </h4>
+      </header>
+      <div className="space-y-1">
         <Disclosure label={t('settings.cardHint')}>
           <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
             {t('automation.settings.desc')}
@@ -277,9 +278,9 @@ export default function AutomationSection() {
 
       {!editing && (
         <Button variant="outline" size="sm" onClick={() => setEditing(emptyTask())}>
-          <Plus size={11} /> {t('automation.settings.newTask')}
+          <CreateIcon size={13} /> {t('automation.settings.newTask')}
         </Button>
       )}
-    </div>
+    </section>
   )
 }

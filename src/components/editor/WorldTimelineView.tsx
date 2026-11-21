@@ -1,5 +1,6 @@
+import { CreateIcon } from '../ui/ActionIcons'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Globe, Plus, Trash2, Route, RefreshCw, X } from 'lucide-react'
+import { Globe, Trash2, Route, RefreshCw, X } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
@@ -170,7 +171,7 @@ export default function WorldTimelineView() {
                 className="min-w-0 flex-1"
               />
               <Button size="sm" className="h-7 px-2" onClick={() => void addEntity()} title={t('world.entityName')}>
-                <Plus size={12} />
+                <CreateIcon size={12} />
               </Button>
             </div>
           </div>
@@ -244,7 +245,7 @@ export default function WorldTimelineView() {
               <Input value={eventChapter} onChange={(e) => setEventChapter(e.target.value)} />
             </div>
             <Button size="sm" className="h-7" onClick={() => void addEvent()}>
-              <Plus size={12} /> {t('world.addEvent')}
+              <CreateIcon size={12} /> {t('world.addEvent')}
             </Button>
           </div>
 

@@ -926,6 +926,10 @@ export interface DatabaseChannels {
   'db:draft-next-version': { args: [chapterNumber: number]; return: number }
   'db:draft-update-status': { args: [id: number, status: string, wordCount?: number]; return: { success: boolean; error?: string } }
   'db:draft-finalize': { args: [input: DraftFinalizationInput & { projectPath: string; writeToken?: string }]; return: DraftFinalizationResult }
+  'db:draft-format-underline': {
+    args: [input: { projectPath: string; writeToken?: string; draftId: number; expectedContent: string; content: string }]
+    return: { success: true; chapterNumber: number } | { success: false; conflict?: boolean; error?: string }
+  }
   'db:draft-archive': {
     args: [input: { projectPath: string; draftId: number; chapterNumber: number }]
     return: { success: true; updatedAt: number } | { success: false; error: string }
@@ -1597,6 +1601,11 @@ export interface LogChannels {
     args: []
     return: { success: boolean; error?: string }
   }
+  'log:export-feedback': {
+    args: []
+    return: { status: 'saved'; path: string; count: number } | { status: 'cancelled' | 'empty' | 'failed' }
+  }
+  'log:open-issues': { args: []; return: { success: boolean } }
 }
 
 // ===== 作品记忆频道（三级摘要文件：章节/分卷/全书 + 跨会话共享事实，.novelforge/memory/*.md） =====

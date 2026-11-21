@@ -29,7 +29,6 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
   { id: 'toggle-sidebar', category: 'view', labelKey: 'command.toggleSidebar', defaultBinding: 'Mod+B' },
   { id: 'toggle-bottom', category: 'view', labelKey: 'command.toggleBottom', defaultBinding: 'Mod+J' },
   { id: 'toggle-agent', category: 'view', labelKey: 'command.toggleAgent', defaultBinding: 'Mod+Shift+A' },
-  { id: 'toggle-workbench-mode', category: 'view', labelKey: 'command.toggleWorkbenchMode', defaultBinding: '' },
   { id: 'focus-mode', category: 'view', labelKey: 'command.focusMode', defaultBinding: 'F11' },
   { id: 'zoom-in', category: 'view', labelKey: 'shortcut.zoomIn', defaultBinding: 'Mod+=' },
   { id: 'zoom-out', category: 'view', labelKey: 'shortcut.zoomOut', defaultBinding: 'Mod+-' },
@@ -172,6 +171,13 @@ export const useShortcutStore = create<ShortcutState>()(persist((set, get) => ({
   resetAll: () => set({ bindings: {} }),
 }), {
   name: 'novelforge:shortcuts',
+  version: 1,
+  partialize: (state) => ({ bindings: state.bindings }),
+  migrate: persisted => {
+    const bindings = { ...(persisted as Pick<ShortcutState, 'bindings'>).bindings }
+    delete bindings['toggle-workbench-mode']
+    return { bindings }
+  },
 }))
 
 /** 读取当前生效绑定（默认值兜底）。 */

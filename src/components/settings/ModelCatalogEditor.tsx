@@ -2,7 +2,6 @@
    与组件同属一处语义（草稿形状 = 提交形状），拆文件只会让「改了 ModelDraft 字段却没改解析」这类
    漂移变成两个文件之间的事；ModelForm.tsx 同款先例。 */
 import { useEffect, useMemo, useState } from 'react'
-import { Plus } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { formatCapacity, parseCapacity } from '../../shared/capacity'
 import { builtinCatalogFor, presetModelDefaults } from '../../shared/provider-presets'
@@ -10,6 +9,7 @@ import type { ModelOverrides } from '../../shared/provider-accounts'
 import type { ModelProfile, ProviderModelQuery } from '../../shared/ipc-channels'
 import type { TextKey } from '../../shared/locale'
 import type { InputType } from './ModelInputTypes'
+import { CreateIcon } from '../ui/ActionIcons'
 import { ModelCatalogRow } from './ModelCatalogRow'
 import { ModelPickerDialog, type AdoptedModel } from './ModelPickerDialog'
 
@@ -441,7 +441,7 @@ export function ModelCatalogEditor({
         onClick={() => { onChange([...rows, { modelName: '' }]) }}
         className="mt-1 flex items-center gap-1 text-micro px-1.5 py-1 rounded-lg transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <Plus size={12} />
+        <CreateIcon size={13} />
         {t('catalog.add')}
       </button>
 

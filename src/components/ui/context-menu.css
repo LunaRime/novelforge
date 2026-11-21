@@ -1,0 +1,38 @@
+.nf-context-menu {
+  position: fixed;
+  z-index: var(--z-dropdown);
+  width: min(18rem, calc(100vw - 16px));
+  max-height: calc(100dvh - 16px);
+  padding: 0.375rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-editor-bg);
+  color: var(--color-text);
+  box-shadow: var(--shadow-popover);
+}
+
+.nf-context-menu[popover] {
+  inset: auto;
+  margin: 0;
+  pointer-events: auto;
+}
+
+.nf-context-menu > button {
+  min-height: 32px;
+  border-radius: var(--radius-md);
+}
+.nf-context-menu > button:focus-visible { background: var(--color-hover); outline-offset: -2px; }
+.nf-context-menu > button[aria-current='true'] { font-weight: 600; }
+.nf-context-divider { border-block-start: 1px solid var(--color-border); margin: 0.375rem 0.5rem; }
+.nf-context-heading {
+  padding: 0.375rem 0.75rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-micro);
+  font-weight: 600;
+}
+
+@media (pointer: coarse) {
+  .nf-context-menu > button { min-height: 44px; }
+}

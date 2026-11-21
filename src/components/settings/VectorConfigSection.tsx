@@ -9,13 +9,14 @@ import { getCurrentLocale, type TextKey } from '../../shared/locale'
  * 4. 工作模式显示（auto / model_only / module_only / disabled）
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import {
-  Database, WifiOff, RefreshCw, CheckCircle2,
-  XCircle, AlertTriangle, Sparkles, Cpu, ArrowRight,
-  Brain, Download, HardDrive,
+  Database, WifiOff, RefreshCw, CheckCircle2, CircleMinus,
+  XCircle, AlertTriangle, Sparkles, Cpu,
+  Brain, Download, HardDrive, Network, Workflow,
 } from 'lucide-react'
 import { ProgressBar } from '../ui/ProgressBar'
+import { Spinner } from '../ui/Spinner'
 import { Disclosure } from '../ui/Disclosure'
 import { useVectorConfigStore, type VectorWorkMode, type VectorTestResult } from '../../stores/vector-config-store'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -69,9 +70,8 @@ function getModeInfo(t: (key: TextKey) => string): Record<VectorWorkMode, {
 export default function VectorConfigSection() {
   const store = useVectorConfigStore()
   const { t } = useTranslation()
-  const [testResult, setTestResult] = useState<VectorTestResult | null>(
-    store.lastTestResult,
-  )
+  const llmModelId = useId()
+  const llmDimensionsId = useId()
 
   // 初始化加载（**只在挂载时跑一次**）
   //
@@ -119,27 +119,20 @@ export default function VectorConfigSection() {
     return parts.join('\n')
   }
 
-  // ===== 测试处理器 =====
-
-  const handleTest = async () => {
-    const result = await store.testConnection()
-    setTestResult(result)
-  }
-
   const modeInfo = getModeInfo(t)[store.workMode]
 
   return (
-    <div className="flex flex-col gap-5 text-sm">
+    <div className="nf-settings-stack text-sm">
       {/* ===== 工作模式状态栏 ===== */}
       <div
-        className="flex items-center gap-3 p-3 rounded-lg border"
+        className="flex items-center gap-3 rounded-lg border p-3"
         style={{
-          backgroundColor: `${modeInfo.color}10`,
-          borderColor: `${modeInfo.color}40`,
+          backgroundColor: `color-mix(in srgb, ${modeInfo.color} 7%, var(--color-panel))`,
+          borderColor: `color-mix(in srgb, ${modeInfo.color} 25%, var(--color-border))`,
         }}
       >
-        <div style={{ color: modeInfo.color }}>{modeInfo.icon}</div>
-        <div className="flex-1">
+        <div className="grid size-8 shrink-0 place-items-center rounded-md bg-[var(--color-panel)]" style={{ color: modeInfo.color }} aria-hidden="true">{modeInfo.icon}</div>
+        <div className="min-w-0">
           <div className="font-medium" style={{ color: 'var(--color-text)' }}>
             {modeInfo.label}{t('vector.modeSuffix')}
           </div>
@@ -150,20 +143,18 @@ export default function VectorConfigSection() {
       </div>
 
       {/* ===== 开关控制区 ===== */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-3">
         {/* 向量模块 */}
-        <div
-          className="p-4 rounded-lg border"
-          style={{ borderColor: 'var(--color-border)' }}
-        >
-          <div className="flex items-center justify-between mb-2">
+        <div className="nf-settings-panel">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Database size={16} style={{ color: 'var(--color-text)' }} />
-              <span className="font-medium" style={{ color: 'var(--color-text)' }}>
+              <Database size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
+              <h4 className="font-medium text-[var(--color-text)]">
                 {t('vector.module')}
-              </span>
+              </h4>
             </div>
             <Switch
+              aria-label={t('vector.module')}
               checked={store.vectorModuleEnabled}
               onCheckedChange={store.toggleVectorModule}
             />
@@ -180,18 +171,16 @@ export default function VectorConfigSection() {
         </div>
 
         {/* 向量模型 */}
-        <div
-          className="p-4 rounded-lg border"
-          style={{ borderColor: 'var(--color-border)' }}
-        >
-          <div className="flex items-center justify-between mb-2">
+        <div className="nf-settings-panel">
+          <div className="mb-2 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
-              <Cpu size={16} style={{ color: 'var(--color-text)' }} />
-              <span className="font-medium" style={{ color: 'var(--color-text)' }}>
+              <Cpu size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
+              <h4 className="font-medium text-[var(--color-text)]">
                 {t('vector.embeddingModelCard')}
-              </span>
+              </h4>
             </div>
             <Switch
+              aria-label={t('vector.embeddingModelCard')}
               checked={store.vectorModelEnabled}
               onCheckedChange={store.toggleVectorModel}
             />
@@ -209,36 +198,37 @@ export default function VectorConfigSection() {
       </div>
 
       {/* ===== 工作分配说明 ===== */}
-      <div
-        className="p-3 rounded-lg text-xs"
-        style={{
-          backgroundColor: 'var(--color-hover)',
-          border: '1px solid var(--color-border)',
-        }}
-      >
-        <div className="flex items-center gap-1 font-medium mb-1" style={{ color: 'var(--color-text)' }}>
-          <ArrowRight size={12} />
+      <section className="nf-settings-panel text-xs">
+        <h4 className="mb-2 flex items-center gap-2 font-medium text-[var(--color-text)]">
+          <Workflow size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
           {t('vector.workDistribution')}
-        </div>
-        <div className="text-[var(--color-text-muted)] leading-relaxed whitespace-pre-line">
+        </h4>
+        <p className="whitespace-pre-line leading-relaxed text-[var(--color-text-secondary)]">
           {distributionLogic(t)}
-        </div>
-      </div>
+        </p>
+      </section>
+
+      <ConnectivityTest
+        testing={store.testing}
+        result={store.lastTestResult}
+        onTest={() => { void store.testConnection() }}
+      />
 
       {/* ===== 本地向量模型（T5，设计 §3.4）===== */}
       <LocalEmbeddingCard />
 
       {/* ===== LLM 向量化 ===== */}
-      <div className="border rounded-lg p-4" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Brain size={16} style={{ color: 'var(--color-text)' }} />
+      <section className="nf-settings-panel">
+        <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <Brain size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
             <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
               {t('vector.llmVectorization')}
             </h4>
             <Badge variant="outline" className="text-2xs">{t('vector.experimental')}</Badge>
           </div>
           <Switch
+            aria-label={t('vector.llmVectorization')}
             checked={store.llmEmbeddingEnabled}
             onCheckedChange={store.toggleLLMEmbedding}
           />
@@ -251,7 +241,7 @@ export default function VectorConfigSection() {
           <div className="space-y-3 mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
             {/* LLM 模型选择 */}
             <div>
-              <Label>{t('vector.selectLLM')}</Label>
+              <Label htmlFor={llmModelId}>{t('vector.selectLLM')}</Label>
               <Select
                 value={store.llmEmbeddingSettings.modelId || ''}
                 onValueChange={(v) => {
@@ -259,7 +249,7 @@ export default function VectorConfigSection() {
                   store.setLLMEmbeddingSettings({ modelId: v === '__none__' ? null : v })
                 }}
               >
-                <SelectTrigger className="w-full mt-1">
+                <SelectTrigger id={llmModelId} className="w-full mt-1">
                   <SelectValue placeholder={t('vector.selectLLMPlaceholder')} />
                 </SelectTrigger>
                 <SelectContent>
@@ -283,8 +273,9 @@ export default function VectorConfigSection() {
 
             {/* 向量维度 */}
             <div>
-              <Label>{t('vector.outputDim').replace('{n}', String(store.llmEmbeddingSettings.dimensions))}</Label>
+              <Label htmlFor={llmDimensionsId}>{t('vector.outputDim').replace('{n}', String(store.llmEmbeddingSettings.dimensions))}</Label>
               <input
+                id={llmDimensionsId}
                 type="range"
                 min="64"
                 max="1024"
@@ -314,105 +305,86 @@ export default function VectorConfigSection() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* ===== 连通性测试 ===== */}
-      <div className="border rounded-lg p-4" style={{ borderColor: 'var(--color-border)' }}>
-        <div className="flex items-center justify-between mb-3">
-          <div>
-            <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
-              {t('vector.connectivityTest')}
-            </h4>
-            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-              {t('vector.connectivityDesc')}
-            </p>
-          </div>
-          <Button
-            variant="ai"
-            size="sm"
-            onClick={handleTest}
-            disabled={store.testing}
-          >
-            <RefreshCw size={12} className={store.testing ? 'animate-spin' : ''} />
-            {store.testing ? t('status.testing') : t('action.runTest')}
-          </Button>
-        </div>
-
-        {/* 测试结果 */}
-        {testResult && (
-          <div className="space-y-2 mt-2">
-            <TestResultRow
-              label={t('vector.testModule')}
-              ok={testResult.moduleOk}
-              detail={testResult.moduleDetail}
-            />
-            <TestResultRow
-              label={t('vector.testModelAPI')}
-              ok={testResult.modelOk}
-              detail={testResult.modelDetail}
-            />
-            <TestResultRow
-              label={t('vector.testLLMEmbedding')}
-              ok={testResult.llmEmbeddingOk}
-              detail={testResult.llmEmbeddingDetail}
-            />
-            <TestResultRow
-              label={t('vector.testAITool')}
-              ok={testResult.agentToolOk}
-              detail={
-                testResult.agentToolOk
-                  ? t('vector.agentOk')
-                  : t('vector.agentFail')
-              }
-            />
-            <div className="text-2xs text-[var(--color-text-muted)] text-right">
-              {t('vector.testTime')}{new Date(testResult.testedAt).toLocaleString(getCurrentLocale())}
-            </div>
-          </div>
-        )}
-
-        {!testResult && !store.testing && (
-          <div className="text-xs text-[var(--color-text-muted)] text-center py-3">
-            {t('vector.runTestHint')}
-          </div>
-        )}
-      </div>
+      </section>
     </div>
   )
 }
 
-// ===== 子组件：测试结果行 =====
-
-function TestResultRow({
-  label,
-  ok,
-  detail,
-}: {
-  label: string
-  ok: boolean
-  detail: string
+function ConnectivityTest({ testing, result, onTest }: {
+  testing: boolean
+  result: VectorTestResult | null
+  onTest: () => void
 }) {
   const { t } = useTranslation()
-  // final wave W4：本行原用硬编码色（`text-green-500` / `text-red-500` / `#16a34a` / `#dc2626`）
-  // ——违反 AGENTS.md 核心约束（颜色只走 CSS 变量）。改用同文件 `:42/:60` 已在用的语义 token，
-  // 零行为变化（同色系，且随主题变量而非固定色）。
+  const agentSkipped = result?.skipped?.includes('agent')
+  const checks = result ? [
+    { label: 'vector.testModule', ok: result.moduleOk, detail: result.moduleDetail, skipped: false },
+    { label: 'vector.testModelAPI', ok: result.modelOk, detail: result.modelDetail, skipped: result.skipped?.includes('model') },
+    { label: 'vector.testLLMEmbedding', ok: result.llmEmbeddingOk, detail: result.llmEmbeddingDetail, skipped: result.skipped?.includes('llm') },
+    {
+      label: 'vector.testAITool',
+      ok: result.agentToolOk,
+      detail: t(agentSkipped ? 'vector.agentSkipped' : result.agentToolOk ? 'vector.agentOk' : 'vector.agentFail'),
+      skipped: agentSkipped,
+    },
+  ] as const : []
+  const passed = checks.filter(check => check.ok).length
+  const skipped = checks.filter(check => check.skipped).length
+  const failed = checks.length - passed - skipped
+  const summary = t('vector.testSummary')
+    .replace('{passed}', String(passed))
+    .replace('{failed}', String(failed))
+    .replace('{skipped}', String(skipped))
+
   return (
-    <div className="flex items-start gap-2 text-xs">
-      {ok ? (
-        <CheckCircle2 size={14} className="text-[var(--color-success)] flex-shrink-0 mt-0.5" />
-      ) : (
-        <XCircle size={14} className="text-[var(--color-error)] flex-shrink-0 mt-0.5" />
-      )}
-      <div>
-        <span
-          className="font-medium"
-          style={{ color: ok ? 'var(--color-success)' : 'var(--color-error)' }}
-        >
-          {label}: {ok ? t('status.normal') : t('status.abnormal')}
-        </span>
-        <div className="text-[var(--color-text-muted)] mt-0.5">{detail}</div>
+    <section className="nf-settings-panel space-y-3">
+      <header className="nf-settings-resource-bar">
+        <div className="min-w-0 flex-1 basis-56">
+          <h4 className="flex items-center gap-2 font-semibold text-[var(--color-text)]">
+            <Network size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
+            {t('vector.connectivityTest')}
+          </h4>
+          <p className="mt-0.5 text-xs leading-relaxed text-[var(--color-text-secondary)]">{t('vector.connectivityDesc')}</p>
+        </div>
+        <Button type="button" size="sm" variant="outline" onClick={onTest} disabled={testing}>
+          {testing ? <Spinner size={14} /> : <RefreshCw size={14} aria-hidden="true" />}
+          {testing ? t('status.testing') : t('action.runTest')}
+        </Button>
+      </header>
+
+      <div className="flex flex-wrap items-baseline justify-between gap-2 text-xs text-[var(--color-text-secondary)]">
+        <p role="status" aria-live="polite">
+          {testing ? t('status.testing') : result ? summary : t('vector.runTestHint')}
+        </p>
+        {!testing && result && (
+          <time dateTime={result.testedAt} className="text-micro tabular-nums text-[var(--color-text-muted)]">
+            {t('vector.testTime')}{new Date(result.testedAt).toLocaleString(getCurrentLocale())}
+          </time>
+        )}
       </div>
-    </div>
+
+      {!testing && result && (
+        <ul aria-label={t('vector.testResults')} className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-2">
+          {checks.map(check => {
+            const Icon = check.ok ? CheckCircle2 : check.skipped ? CircleMinus : XCircle
+            const variant = check.ok ? 'success' : check.skipped ? 'outline' : 'error'
+            const status = check.ok ? 'status.normal' : check.skipped ? 'vector.testSkipped' : 'status.abnormal'
+            return (
+              <li key={check.label} className="min-w-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="text-xs font-medium text-[var(--color-text)]">{t(check.label)}</span>
+                  <Badge variant={variant} className="gap-1 py-1">
+                    <Icon size={12} aria-hidden="true" />
+                    {t(status)}
+                  </Badge>
+                </div>
+                <p className="mt-1.5 text-xs leading-relaxed text-[var(--color-text-secondary)] [overflow-wrap:anywhere]">{check.detail}</p>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+    </section>
   )
 }
 
@@ -793,11 +765,11 @@ function LocalEmbeddingCard() {
   }
 
   return (
-    <div className="border rounded-lg p-4" style={{ borderColor: 'var(--color-border)' }}>
+    <section className="nf-settings-panel" aria-label={t('localEmbedding.title')}>
       {/* 标题 + 三态徽标 + 开关 */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-2 flex-wrap">
-          <HardDrive size={16} style={{ color: 'var(--color-text)' }} />
+          <HardDrive size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
           <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
             {t('localEmbedding.title')}
           </h4>
@@ -1095,6 +1067,6 @@ function LocalEmbeddingCard() {
           </p>
         </Disclosure>
       )}
-    </div>
+    </section>
   )
 }

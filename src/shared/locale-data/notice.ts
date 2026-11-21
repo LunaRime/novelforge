@@ -45,8 +45,9 @@ export const noticeTexts = {
   'route.tierEmpty': { 'zh-CN': '未指定（回退默认模型）', 'en-US': 'Unset (falls back to the default model)', 'ru-RU': 'Не задано (используется модель по умолчанию)' },
   // ⚠️ 原 `route.tierFirst`（首选 {name}）与 `route.moreCount`（+{n}）已删除（2026-10-16 用户要求）：
   //    卡片上**不再显示模型型号与优先级序号**，名单/顺序一律进「编辑优先级」弹窗看。不要再加回来。
-  'route.dialogTitle': { 'zh-CN': '设置「{tier}」层的模型与优先级', 'en-US': 'Models and priority for the "{tier}" tier', 'ru-RU': 'Модели и приоритет уровня «{tier}»' },
+  'route.dialogTitle': { 'zh-CN': '「{tier}」的模型优先级', 'en-US': 'Models and priority for the "{tier}" tier', 'ru-RU': 'Модели и приоритет уровня «{tier}»' },
   'route.dialogHint': { 'zh-CN': '勾选加入该层；序号 1 最先尝试，失败或超限时按序号依次回退。一个都不勾 = 该层回退到默认模型。', 'en-US': 'Tick to add a model to this tier. Number 1 is tried first; on failure or limit the next number is used. None ticked = this tier falls back to the default model.', 'ru-RU': 'Отметьте модели для этого уровня. Номер 1 пробуется первым, далее по порядку. Если ничего не отмечено — уровень использует модель по умолчанию.' },
+  'route.reorderHint': { 'zh-CN': "拖动整行可调整顺序，也可用两侧箭头逐位调整。", 'en-US': "Drag a row to reorder it, or use the arrow buttons.", 'ru-RU': "Перетащите строку или измените порядок кнопками со стрелками." },
   'route.selectedTitle': { 'zh-CN': '已选（顺序即优先级）', 'en-US': 'Selected (order = priority)', 'ru-RU': 'Выбрано (порядок = приоритет)' },
   'route.candidatesTitle': { 'zh-CN': '可选模型', 'en-US': 'Available models', 'ru-RU': 'Доступные модели' },
   'route.moveUp': { 'zh-CN': '上移一位', 'en-US': 'Move up', 'ru-RU': 'Вверх' },
@@ -82,9 +83,9 @@ export const noticeTexts = {
 
   // ===== theme.* / learning.* —— 仅新增（既有 key 在 ui.ts） =====
   'theme.appearance': { 'zh-CN': '界面主题', 'en-US': 'Appearance', 'ru-RU': 'Оформление' },
-  'theme.appearanceDesc': { 'zh-CN': '选中即生效；与右侧图标栏底部的主题菜单同源，改一处两处同步', 'en-US': 'Applies immediately; same source as the theme menu at the bottom of the right activity bar', 'ru-RU': 'Применяется сразу; тот же источник, что и меню темы на правой панели' },
+  'theme.appearanceDesc': { 'zh-CN': '选择主题后立即生效，并同步到工作台顶栏。', 'en-US': 'Changes apply immediately and are reflected in the workbench header.', 'ru-RU': 'Тема меняется сразу и отображается в верхней панели.' },
   'theme.applied': { 'zh-CN': '当前主题', 'en-US': 'Current', 'ru-RU': 'Текущая' },
-  'theme.palettePreview': { 'zh-CN': '当前主题的配色预览', 'en-US': 'Palette preview in the current theme', 'ru-RU': 'Предпросмотр палитры в текущей теме' },
+  'theme.palettePreview': { 'zh-CN': '主题配色预览', 'en-US': 'Theme palette preview', 'ru-RU': 'Предпросмотр палитры темы' },
   'learning.summaryShort': { 'zh-CN': '默认关闭；只影响之后的压缩，可随时重置。', 'en-US': 'Off by default; affects future compactions only and can be reset anytime.', 'ru-RU': 'По умолчанию выключено; влияет только на будущие сжатия и сбрасывается в любой момент.' },
   'learning.signals': { 'zh-CN': '学习信号：跳过 / 硬截断 / 保真缺失 / 用户移除', 'en-US': 'Signals: skips / hard truncations / fidelity misses / user reverts', 'ru-RU': 'Сигналы: пропуски / обрезка / потери точности / отмены' },
   'learning.effect': { 'zh-CN': '调整范围：仅「最小有效降幅」的倍率（±50% 以内），并把学到的保留/省略要求追加到摘要提示。', 'en-US': 'Scope: only the minimum-reduction multiplier (within ±50%), plus learned keep/omit requirements appended to the summary prompt.', 'ru-RU': 'Область: только множитель минимального сокращения (±50%) и выученные требования к сводке.' },

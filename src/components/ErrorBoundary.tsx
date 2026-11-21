@@ -1,6 +1,7 @@
 import { Component, createContext } from 'react'
 import type { ReactNode, ErrorInfo, ContextType } from 'react'
 import { t } from '../shared/locale'
+import { SemanticIcon } from './ui/SemanticLabel'
 
 interface Props {
   children: ReactNode
@@ -48,7 +49,7 @@ export class ErrorBoundary extends Component<Props, State> {
             color: 'var(--color-text)',
           }}
         >
-          <span style={{ fontSize: 32 }}>⚠️</span>
+          <SemanticIcon name="warning" size={32} />
           <p style={{ fontWeight: 600, fontSize: 14 }}>
             {this.props.fallbackLabel || t('error.renderFailed')}
           </p>

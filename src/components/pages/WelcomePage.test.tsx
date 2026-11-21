@@ -6,8 +6,17 @@ import { expect, it, vi } from 'vitest'
 import { t } from '../../shared/locale'
 import WelcomePage from './WelcomePage'
 
+const projectState = vi.hoisted(() => ({
+  currentProject: null,
+  recentProjects: [{ name: 'Last novel', path: 'F:/books/last-novel', updatedAt: 1 }],
+  openProject: vi.fn().mockResolvedValue(true),
+}))
+
 vi.mock('../../stores/project-store', () => ({
-  useProjectStore: (select: (state: { currentProject: null }) => null) => select({ currentProject: null }),
+  useProjectStore: Object.assign(
+    (select: (state: typeof projectState) => unknown) => select(projectState),
+    { getState: () => projectState },
+  ),
 }))
 
 it('keeps the welcome actions available after a folder chooser error or cancellation', async () => {
@@ -30,6 +39,8 @@ it('keeps the welcome actions available after a folder chooser error or cancella
     expect(onOpenProject).toHaveBeenCalledTimes(2)
     expect(open.disabled).toBe(false)
     expect(container.querySelector('[role="alert"]')).toBeNull()
+    await act(async () => { button(projectState.recentProjects[0].name).click() })
+    expect(projectState.openProject).toHaveBeenCalledWith(projectState.recentProjects[0].path)
     await act(async () => { button(t('welcome.newProject')).click(); button(t('welcome.importNovel')).click() })
     expect(onNewProject).toHaveBeenCalledOnce()
     expect(onImportNovel).toHaveBeenCalledOnce()

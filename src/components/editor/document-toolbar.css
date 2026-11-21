@@ -1,0 +1,125 @@
+.nf-document-toolbar {
+  container-name: draft-toolbar;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.375rem;
+  min-height: 3rem;
+  padding: 0.25rem clamp(0.5rem, 2vw, 1rem);
+  background: var(--color-editor-bg);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.nf-document-state,
+.nf-document-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.nf-document-state { min-width: 0; }
+.nf-document-actions { flex: none; }
+.nf-document-state .nf-version-actions-wide { white-space: nowrap; }
+.nf-document-appearance { flex: none; color: var(--color-accent); }
+
+.nf-document-badge {
+  display: inline-flex;
+  min-width: 0;
+  padding: 0.125rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-panel);
+  font-size: var(--text-micro);
+  font-weight: 500;
+}
+
+.nf-document-dirty {
+  flex: 0 0 0.375rem;
+  height: 0.375rem;
+  transform: rotate(45deg);
+  background: var(--color-warning);
+}
+
+@container draft-toolbar (max-width: 50rem) {
+  /* 同时存在修稿或审稿回执时，提前收纳次要操作，为状态和保存让出空间。 */
+  [data-extra-actions='true'] .nf-version-actions-wide { display: none; }
+  [data-extra-actions='true'] .nf-version-actions-narrow { display: block; }
+}
+
+@container draft-toolbar (max-width: 48rem) {
+  .nf-document-actions .nf-version-actions-wide { display: none; }
+  .nf-document-actions .nf-version-actions-narrow { display: block; }
+}
+
+/* 活动标签与正文共用纸面，双侧收边，下缘覆盖轨道分隔线。 */
+.nf-editor-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: stretch;
+  gap: 0.5rem;
+  min-height: 2.75rem;
+  padding: 0.375rem 0.625rem 0;
+  box-shadow: inset 0 -1px var(--color-border);
+  background: var(--color-panel);
+}
+
+.nf-editor-tab-list {
+  display: flex;
+  flex: 1;
+  gap: 0.25rem;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nf-editor-tab {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-width: 0;
+  max-width: 15rem;
+  border: 1px solid transparent;
+  border-block-end: 0;
+  border-start-start-radius: var(--radius-lg);
+  border-start-end-radius: var(--radius-lg);
+  color: var(--color-text-secondary);
+}
+
+.nf-editor-tab:hover,
+.nf-editor-tab:focus-within { background: var(--color-hover); }
+
+.nf-editor-tab[data-active='true'] {
+  background: var(--color-editor-bg);
+  border-color: var(--color-border);
+  box-shadow: inset 0 2px var(--color-workbench-fold);
+  color: var(--color-text);
+}
+
+.nf-editor-tabs > :last-child { align-self: center; padding-block-end: 0.125rem; }
+
+.nf-editor-tab-select {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  align-self: stretch;
+  gap: 0.375rem;
+  padding-inline: 0.5rem 0.125rem;
+  border-radius: var(--radius-md);
+  text-align: start;
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.nf-editor-tab[data-active='true'] .nf-editor-tab-select { font-weight: 600; }
+.nf-editor-tab-select svg { flex: none; }
+.nf-editor-tab-select:focus-visible { outline-offset: -2px; }
+.nf-editor-tab-close { margin-inline-end: 0.125rem; }
+.nf-editor-tab-close[data-dirty='true'] svg { display: none; }
+.nf-editor-tab-close[data-dirty='true']:is(:hover, :focus-visible) svg { display: block; }
+.nf-editor-tab-close[data-dirty='true']:is(:hover, :focus-visible) .nf-document-dirty { display: none; }
+
+@media (pointer: coarse) {
+  .nf-editor-tabs button,
+  .nf-document-toolbar button.nf-document-appearance { min-width: 44px; min-height: 44px; }
+}

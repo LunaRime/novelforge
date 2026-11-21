@@ -152,12 +152,14 @@ export default function ContextCompactionSection() {
   )
 
   return (
-    <div
-      className="rounded-xl p-4 space-y-4"
-      style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-    >
+    <section className="nf-settings-panel space-y-3">
+      <header className="nf-settings-resource-bar">
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+          <Minimize2 size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
+          {t('settings.compactionTitle')}
+        </h4>
+      </header>
       <div className="space-y-1">
-        <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.compactionTitle')}</p>
         <Disclosure label={t('settings.cardHint')}>
           <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
             {t('settings.compactionDesc')}
@@ -273,6 +275,6 @@ export default function ContextCompactionSection() {
           {t('action.save')}
         </Button>
       </div>
-    </div>
+    </section>
   )
 }

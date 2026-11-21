@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 /**
  * SceneDialog — 场景卡新建/编辑弹框（计划书 工作流 E）
  *
@@ -14,7 +15,7 @@ import {
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { upsertScene, type SceneItem } from '../../services/scene-service'
 
@@ -86,7 +87,7 @@ export default function SceneDialog({ isOpen, onClose, chapterNumber, editing, n
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[420px]">
+      <DialogContent className="max-w-[420px]" onKeyDown={event => handleSaveShortcut(event, handleSave, !saving)}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clapperboard size={16} className="text-[var(--color-accent)]" />
@@ -132,7 +133,7 @@ export default function SceneDialog({ isOpen, onClose, chapterNumber, editing, n
             <Label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--color-text)' }}>
               {t('scene.summary')}
             </Label>
-            <Textarea
+            <MarkdownField startInEdit
               value={summary}
               onChange={e => setSummary(e.target.value)}
               rows={4}

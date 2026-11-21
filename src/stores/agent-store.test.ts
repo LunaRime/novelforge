@@ -592,6 +592,21 @@ describe('sendMessage 意图预路由', () => {
     expect(after.messages.filter(m => m.role === 'user')[0].content).toBe('/status 写第三章')
   })
 
+  it.each(['plan', 'review', 'recap'] as const)('/%s 仅在本轮添加写作目标和只读工具列表', async (name) => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    const request = `/${name} 第三章`
+    await useAgentStore.getState().sendMessage(request)
+
+    expect(mockDetect).not.toHaveBeenCalled()
+    const [system, , , , , , , options] = mockRunAgentLoop.mock.calls[0]
+    expect(system).toContain(t(`cmd.${name}Prompt`).replace('{args}', '第三章'))
+    expect(options?.allowedTools).toContain('read_blueprint')
+    expect(options?.allowedTools).not.toContain('start_workflow')
+    expect(options?.allowedTools).not.toContain('write_file')
+    expect(useAgentStore.getState().conversations.find(row => row.id === conv.id)?.messages[0].content).toBe(request)
+  })
+
   it('character 命中：userMsg.content 为增强内容（原文不重复出现），走 ReAct（P0-4 回归）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ defaultModelId: 'test-model' })

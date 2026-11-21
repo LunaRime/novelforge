@@ -13,9 +13,9 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'btn-primary text-white',
+          'btn-primary',
         ai:
-          'ai-glow text-white shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] relative overflow-hidden',
+          'btn-ai',
         destructive:
           'bg-[var(--color-error)] text-white shadow-[var(--shadow-sm)] hover:shadow-[0_4px_12px_rgba(var(--color-error-rgb),0.3)] transition-all duration-200 hover:brightness-110 active:scale-[0.96]',
         outline:

@@ -1,8 +1,8 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
+import { CreateIcon } from '../ui/ActionIcons'
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { getCurrentLocale, type TextKey } from '../../shared/locale'
 import {
-  Save, BookOpen, RefreshCw, Plus, Trash2,
-  Sparkles, PenLine, ScanSearch, X, ListChecks
+  Save, BookOpen, RefreshCw, Sparkles, PenLine, ScanSearch, X, ListChecks
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
@@ -18,41 +18,16 @@ import { startWorkflow as startApplicationWorkflow } from '../../services/workfl
 import { generateVerificationReport, type VerificationReport } from '../../services/blueprint-verification-service'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
 import BlueprintSortBar from './BlueprintSortBar'
+import { BlueprintDetail, BlueprintList } from './BlueprintViews'
 import { useBlueprintSortStore } from '../../stores/blueprint-sort-store'
 import { Button } from '../ui/Button'
 import CountBadge from '../ui/CountBadge'
 import EditorPageHeader from '../ui/EditorPageHeader'
 import { FeatureSplit } from '../ui/FeatureSplit'
-import { Input } from '../ui/Input'
-import { Textarea } from '../ui/Textarea'
-import { Label } from '../ui/Label'
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
-import { cn } from '../../lib/utils'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import { renderLog } from '../../services/render-logger'
 import { globalEventBus } from '../../shared/event-bus'
-
-const ROLES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
-
-/** 章节角色 value（中文数据，存库兼容）→ i18n key（下拉显示时 t()） */
-const ROLE_LABEL_KEYS: Record<string, TextKey> = {
-  '建置': 'chapter.role.establishment',
-  '铺垫': 'chapter.role.setup',
-  '发展': 'chapter.role.development',
-  '冲突': 'chapter.role.conflict',
-  '高潮': 'chapter.role.climax',
-  '转折': 'chapter.role.twist',
-  '收尾': 'chapter.role.resolution',
-}
-
-const ROLE_COLORS: Record<string, string> = {
-  高潮: 'bg-[rgba(var(--color-error-rgb),0.2)] text-[var(--color-error)]',
-  冲突: 'bg-[rgba(var(--color-warning-rgb),0.2)] text-[var(--color-warning)]',
-  转折: 'bg-[rgba(var(--color-accent-rgb),0.2)] text-[var(--color-accent)]',
-  建置: 'bg-[rgba(var(--color-info-rgb),0.2)] text-[var(--color-info)]',
-  收尾: 'bg-[rgba(var(--color-success-rgb),0.2)] text-[var(--color-success)]',
-}
 
 /** 章节蓝图编辑器 — 读写 directory.json */
 export default function ChapterCardEditor() {
@@ -390,11 +365,11 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
   }
 
   return (
-    <div className="@container h-full flex flex-col overflow-hidden">
+    <div className="@container h-full flex flex-col overflow-hidden" onKeyDown={event => handleSaveShortcut(event, handleSaveAll, dirty && !saving && !deleting)}>
       {/* 顶部工具栏 */}
       <EditorPageHeader
-        className="h-auto min-h-10 py-1 @max-[58rem]:flex-col @max-[58rem]:items-start"
-        actionsClassName="min-w-0 max-w-full shrink flex-nowrap overflow-x-auto whitespace-nowrap px-1 py-1 @max-[58rem]:w-full [&>*]:shrink-0"
+        className="gap-y-2.5 px-4 py-2.5"
+        actionsClassName="w-full justify-between gap-x-3 gap-y-2 border-t border-[var(--color-border)] pt-2"
         icon={<BookOpen size={13} />}
         title={t('chapter.blueprintTitle')}
         meta={(
@@ -405,62 +380,65 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
         )}
         actions={(
           <>
-          {dirty && (
-            <Button variant="outline" size="sm" onClick={handleSaveAll} disabled={saving || deleting}>
-              <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.saveAll')}
+          <div className="flex flex-wrap items-center gap-1.5 [&_button]:h-8">
+            <BlueprintSortBar />
+            {dirty && (
+              <Button variant="outline" size="sm" onClick={handleSaveAll} disabled={saving || deleting}>
+                <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.saveAll')}
+              </Button>
+            )}
+            {/* 写作入口 — 仅下一章可写且存在对应蓝图时显示 */}
+            {nextWriteBlueprint && selected !== nextWriteBlueprint && (
+              <Button
+                variant="ai"
+                size="sm"
+                onClick={() => handleWriteChapter(nextWriteBlueprint)}
+              >
+                <PenLine size={12} />
+                {t('chapter.writeChapterN').replace('{n}', String(nextWriteChapter))}
+              </Button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 [&_button]:h-8">
+            {/* 线③ 第 5 条：蓝图校检按钮 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={runVerify}
+              disabled={verifying || saving || deleting}
+              title={t('verify.title')}
+            >
+              <ScanSearch size={12} className={verifying ? 'animate-pulse' : ''} />
+              {verifying ? t('verify.verifying') : t('verify.title')}
             </Button>
-          )}
-          {/* 写作入口 — 仅下一章可写且存在对应蓝图时显示 */}
-          {nextWriteBlueprint && (
+            {/* 整本流水线：应用级入口，任何模型/新会话都可继续 */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRunBookPipeline}
+              title={t('chapter.bookPipelineTip')}
+            >
+              <ListChecks size={12} />
+              {t('chapter.bookPipeline')}
+            </Button>
+            {/* AI 生成蓝图 → 弹出 DirectoryConfigDialog */}
             <Button
               variant="ai"
               size="sm"
-              onClick={() => handleWriteChapter(nextWriteBlueprint)}
+              onClick={() => setShowBlueprintDialog(true)}
+              disabled={startingBlueprint}
+              title={t('chapter.aiBlueprint')}
             >
-              <PenLine size={12} />
-              {t('chapter.writeChapterN').replace('{n}', String(nextWriteChapter))}
+              <Sparkles size={12} />
+              {t('blueprint.aiGenerate')}
             </Button>
-          )}
-          {/* 排序工具栏 */}
-          <BlueprintSortBar />
-          {/* 线③ 第 5 条：蓝图校检按钮 */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={runVerify}
-            disabled={verifying || saving || deleting}
-            title={t('verify.title')}
-          >
-            <ScanSearch size={12} className={verifying ? 'animate-pulse' : ''} />
-            {verifying ? t('verify.verifying') : t('verify.title')}
-          </Button>
-          {/* 整本流水线：应用级入口，任何模型/新会话都可继续 */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRunBookPipeline}
-            title={t('chapter.bookPipelineTip')}
-          >
-            <ListChecks size={12} />
-            {t('chapter.bookPipeline')}
-          </Button>
-          {/* AI 生成蓝图 → 弹出 DirectoryConfigDialog */}
-          <Button
-            variant="ai"
-            size="sm"
-            onClick={() => setShowBlueprintDialog(true)}
-            disabled={startingBlueprint}
-            title={t('chapter.aiBlueprint')}
-          >
-            <Sparkles size={12} />
-            {t('blueprint.aiGenerate')}
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => void loadBlueprints(true)} title={t('chapter.reload')} disabled={loading || saving || deleting}>
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleAddChapter} title={t('chapter.newChapter')} disabled={saving || deleting || loadFailed}>
-            <Plus size={14} />
-          </Button>
+            <Button variant="ghost" size="icon" onClick={() => void loadBlueprints(true)} title={t('chapter.reload')} aria-label={t('chapter.reload')} disabled={loading || saving || deleting}>
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={handleAddChapter} title={t('chapter.newChapter')} aria-label={t('chapter.newChapter')} disabled={saving || deleting || loadFailed}>
+              <CreateIcon size={14} />
+            </Button>
+          </div>
           </>
         )}
       />
@@ -537,252 +515,14 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
         onConfirm={directory => void startBlueprint({ workflow: 'generate_blueprint', directory })}
       />
 
-      <FeatureSplit detailOpen={detailOpen} onBack={() => setDetailOpen(false)} list={<>
-          {blueprints.length === 0 ? (
-            <div className="flex flex-col items-center justify-center flex-1 gap-3 opacity-40 p-4">
-              <BookOpen size={36} />
-              <span className="text-xs text-center">{t(loadFailed ? 'common.loadFailed' : 'blueprint.emptyHint')}</span>
-            </div>
-          ) : (
-          <div className="flex-1 overflow-y-auto p-1">
-            {blueprints.map((bp, idx) => (
-              <button type="button"
-                key={bp.chapterNumber}
-                className={cn(
-                  'group block w-full relative px-2.5 py-2 rounded-md text-left text-xs cursor-pointer mb-[var(--v3-list-gap,2px)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)]',
-                  selectedIdx === idx
-                    ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-                    : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]'
-                )}
-                aria-current={selectedIdx === idx ? 'page' : undefined}
-                title={bp.title || undefined}
-                onClick={() => { setSelectedIdx(idx); setDetailOpen(true) }}
-              >
-                <span className="flex items-center gap-1.5">
-                  <span className="font-mono text-micro opacity-40 flex-shrink-0">
-                    {bp.chapterNumber}
-                  </span>
-                  <span className="font-medium truncate flex-1">{bp.title || t('character.unnamed')}</span>
-                </span>
-                <span className="flex items-center gap-1 mt-0.5">
-                  {(() => {
-                    const vol = volumes.find(v =>
-                      v.chapterStart <= bp.chapterNumber &&
-                      (v.chapterEnd === 0 || bp.chapterNumber <= v.chapterEnd))
-                    return vol ? (
-                      <span
-                        className="text-micro px-1 py-0.5 rounded"
-                        style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
-                        title={vol.title || undefined}
-                      >
-                        {t('volume.ordinal').replace('{n}', String(vol.volumeNumber))}
-                      </span>
-                    ) : null
-                  })()}
-                  <span className={cn(
-                    'text-micro px-1 py-0.5 rounded',
-                    ROLE_COLORS[bp.role] || 'bg-[var(--color-hover)] text-[var(--color-text-muted)]'
-                  )}>
-                    {t(ROLE_LABEL_KEYS[bp.role] ?? 'chapter.role.development')}
-                  </span>
-                  {bp.userGuidance && (
-                    <span
-                      className="text-micro px-1 py-0.5 rounded"
-                      style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.15)', color: 'var(--color-accent)' }}
-                      title={t('chapter.authorGuidance')}
-                    >
-                      {t('chapter.hasGuidance')}
-                    </span>
-                  )}
-                  {bp.notes && (
-                    <span
-                      className="text-micro px-1 py-0.5 rounded"
-                      style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.15)', color: 'var(--color-success)' }}
-                      title={t('chapter.blueprintNotes')}
-                    >
-                      {t('chapter.hasNotes')}
-                    </span>
-                  )}
-                </span>
-              </button>
-            ))}
-          </div>
-          )}
-      </>}>
-        <div className="flex-1 overflow-y-auto">
-          {selected ? (
-            <fieldset className="min-w-0 max-w-2xl mx-auto px-5 py-4" disabled={deleting}>
-              {/* 编辑区头部 */}
-              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                <h3 className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>
-                  {t('import.chapterLabel').replace('{n}', String(selected.chapterNumber)).replace('{title}', selected.title || t('chapter.unnamed'))}
-                </h3>
-                <div className="flex items-center gap-1.5">
-                  {/* 仅下一章允许写作 */}
-                  {nextWriteBlueprint && selected === nextWriteBlueprint && (
-                    <Button
-                      variant="ai"
-                      size="sm"
-                      onClick={() => handleWriteChapter(selected)}
-                      title={t('chapter.generateDraft')}
-                    >
-                      <PenLine size={12} /> {t('chapter.writeThisChapter')}
-                    </Button>
-                  )}
-                  <Button variant="ghost" size="icon" onClick={handleDeleteChapter} title={t('chapter.deleteChapter')} disabled={saving || deleting}>
-                    <Trash2 size={13} style={{ color: 'var(--color-text-muted)' }} />
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={handleSaveOne} disabled={saving || deleting}>
-                    <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.save')}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                {/* 基本信息 */}
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
-                  <div>
-                    <Label>{t('blueprint.chapterNumber')}</Label>
-                    <Input
-                      type="number"
-                      value={selected.chapterNumber === 0 ? '' : selected.chapterNumber}
-                      onChange={e => {
-                        const raw = e.target.value
-                        if (raw === '') {
-                          updateField('chapterNumber', 0)
-                        } else {
-                          const n = parseInt(raw, 10)
-                          if (!isNaN(n)) updateField('chapterNumber', n)
-                        }
-                      }}
-                      onBlur={() => {
-                        if (!selected.chapterNumber || selected.chapterNumber < 1) {
-                          updateField('chapterNumber', 1)
-                        }
-                      }}
-                    />
-                  </div>
-                  <div className="col-span-2">
-                    <Label>{t('blueprint.chapterTitle')}</Label>
-                    <Input
-                      value={selected.title}
-                      onChange={e => updateField('title', e.target.value)}
-                      placeholder={t('chapter.placeholderTitle')}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
-                  <div>
-                    <Label>{t('blueprint.chapterPosition')}</Label>
-                    <Select value={selected.role} onValueChange={(v) => updateField('role', v)}>
-                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {ROLES.map(r => <SelectItem key={r} value={r}>{t(ROLE_LABEL_KEYS[r] ?? 'chapter.role.development')}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label>{t('blueprint.keyCharacters')}</Label>
-                    <Input
-                      value={selected.characters.join('、')}
-                      onChange={e => updateField('characters', e.target.value.split(/[,，、\s]+/).filter(Boolean))}
-                      placeholder={t('chapter.placeholderCharacters')}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label>{t('blueprint.mcGoal')}</Label>
-                  <Textarea
-                    value={selected.purpose}
-                    onChange={e => updateField('purpose', e.target.value)}
-                    placeholder={t('chapter.placeholderConflict')}
-                    rows={2}
-                  />
-                </div>
-
-                <div>
-                  <Label>{t('blueprint.conflict')}</Label>
-                  <Textarea
-                    value={selected.keyEvents}
-                    onChange={e => updateField('keyEvents', e.target.value)}
-                    placeholder={t('chapter.placeholderActions')}
-                    rows={4}
-                  />
-                </div>
-
-                <div>
-                  <Label>{t('blueprint.cliffhanger')}</Label>
-                  <Textarea
-                    value={selected.suspenseHook}
-                    onChange={e => updateField('suspenseHook', e.target.value)}
-                    placeholder={t('chapter.placeholderSuspense')}
-                    rows={2}
-                  />
-                </div>
-
-                {/* 作者微操指导 — 特别标注，写稿时注入为最高优先级 */}
-                <div
-                  className="p-3 rounded-lg border"
-                  style={{
-                    borderColor: 'var(--color-accent)',
-                    backgroundColor: 'rgba(var(--color-accent-rgb), 0.06)',
-                  }}
-                >
-                  <Label className="flex items-center gap-1.5">
-                    <span>{t('blueprint.authorGuidance')}</span>
-                    <span
-                      className="text-micro font-normal"
-                      style={{ color: 'var(--color-text-muted)' }}
-                    >
-                      {t('chapter.guidanceHint')}
-                    </span>
-                  </Label>
-                  <Textarea
-                    value={selected.userGuidance}
-                    onChange={e => updateField('userGuidance', e.target.value)}
-                    placeholder={t('chapter.placeholderGuidance')}
-                    rows={3}
-                    className="mt-1.5"
-                  />
-                </div>
-                {/* 章节要点（定稿后自动生成，也可手动编辑） */}
-                <div
-                  className="p-3 rounded-lg border"
-                  style={{
-                    borderColor: 'var(--color-border)',
-                    backgroundColor: 'rgba(var(--color-success-rgb),0.04)',
-                  }}
-                >
-                  <Label className="flex items-center gap-1.5">
-                    <span>{t('blueprint.keyPoints')}</span>
-                    <span
-                      className="text-micro font-normal"
-                      style={{ color: 'var(--color-text-muted)' }}
-                    >
-                      {selected.notesUpdatedAt
-                        ? t('chapter.notesAuto').replace('{date}', new Date(selected.notesUpdatedAt).toLocaleDateString(getCurrentLocale()))
-                        : t('chapter.notesAutoManual')
-                      }
-                    </span>
-                  </Label>
-                  <Textarea
-                    value={selected.notes || ''}
-                    onChange={e => updateField('notes', e.target.value)}
-                    placeholder={t('chapter.placeholderNotes')}
-                    rows={4}
-                  />
-                </div>
-              </div>
-            </fieldset>
-          ) : (
-            <div className="flex flex-col items-center justify-center h-full gap-3 opacity-30">
-              <BookOpen size={36} />
-              <span className="text-sm">{t('blueprint.selectChapter')}</span>
-            </div>
-          )}
-        </div>
+      <FeatureSplit detailOpen={detailOpen} onBack={() => setDetailOpen(false)} list={
+        <BlueprintList blueprints={blueprints} volumes={volumes} selectedIdx={selectedIdx} loadFailed={loadFailed}
+          onSelect={index => { setSelectedIdx(index); setDetailOpen(true) }} />
+      }>
+        <BlueprintDetail selected={selected} canWrite={selected !== null && selected === nextWriteBlueprint}
+          saving={saving} deleting={deleting} updateField={updateField}
+          onWrite={() => { if (selected) handleWriteChapter(selected) }}
+          onSave={handleSaveOne} onDelete={handleDeleteChapter} />
       </FeatureSplit>
     </div>
   )

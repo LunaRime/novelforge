@@ -11,6 +11,7 @@
  * 3. 保存成功：stripStatusFrontmatter 去 status（编辑后不再 stale）→ 刷新记忆列表
  *    → 清 dirty；日志走 Save:Memory / log:write（LogsView 可观测）
  */
+import { formatBinding, shortcutBinding } from '../../stores/shortcut-store'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
@@ -22,6 +23,7 @@ import { useMemoryStore } from '../../stores/memory-store'
 import { useProjectStore } from '../../stores/project-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { t } from '../../shared/locale'
+import { globalEventBus } from '../../shared/event-bus'
 
 const FILE = 'chapters-1-3.md'
 const TAB_ID = `${VELA.MEMORY}${FILE}`
@@ -75,7 +77,7 @@ function markDirty(content: string) {
 
 /** 点击信息栏的保存按钮（仅 dirty 时渲染） */
 function clickSave(container: HTMLElement) {
-  const btn = [...container.querySelectorAll('button')].find(b => b.title === t('tip.saveShortcut'))!
+  const btn = [...container.querySelectorAll('button')].find(b => b.title === t('tip.saveShortcut').replace('{shortcut}', formatBinding(shortcutBinding('save'))))!
   expect(btn).toBeTruthy()
   act(() => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
 }
@@ -94,6 +96,9 @@ describe('EditorArea — 记忆文件标签页', () => {
     writeCalls = []
     invoke = vi.fn(async (ch: string, ...args: unknown[]) => {
       if (ch === 'memory:list') return []
+      if (ch === 'kb:list-documents') return []
+      if (ch === 'kb:stats') return { documentCount: 0, totalChunks: 0, vectorDimension: 0 }
+      if (ch === 'kb:get-vectorless-count') return { count: 0 }
       if (ch === 'memory:write') { writeCalls.push([ch, ...args]); return { success: true } }
       return null
     })
@@ -196,6 +201,10 @@ describe('EditorArea — 记忆文件标签页', () => {
     // 修复前：knowledgeTabActive 恒 false → 这里会渲染 KnowledgeOverview（点了像没反应）
     expect(container.querySelector('.cm-editor')).toBeTruthy()
     expect(container.querySelector('.cm-content')?.textContent).toContain('第 1 章 · 开端')
+    await act(async () => globalEventBus.emit('OPEN_KNOWLEDGE_SEARCH', {}))
+    const search = [...container.querySelectorAll('button')].find(button => button.textContent === t('knowledge.semanticSearch'))
+    expect(search?.getAttribute('aria-pressed')).toBe('true')
+    expect(useEditorStore.getState().tabs).toContainEqual(expect.objectContaining({ id: TAB_ID }))
     act(() => { root.unmount() })
   })
 })
@@ -215,6 +224,18 @@ describe('EditorArea — 标签关闭', () => {
     useLayoutStore.setState({ sidebarView: 'project' })
     useEditorStore.setState({ tabs: [draft], activeTabId: draft.id })
     view = mountEditorArea()
+  })
+
+  it('方向键在文档标签之间移动焦点并激活目标', () => {
+    const second = { ...draft, id: 'doc:8', name: '另一章', dirty: false }
+    act(() => useEditorStore.getState().openFile(second))
+    const tabs = view.container.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+    expect(tabs).toHaveLength(2)
+    tabs[1].focus()
+    act(() => tabs[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })))
+    expect(useEditorStore.getState().activeTabId).toBe(draft.id)
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(tabs[0])
   })
 
   afterEach(() => {

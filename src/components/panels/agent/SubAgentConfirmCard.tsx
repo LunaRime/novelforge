@@ -50,7 +50,7 @@ export default function SubAgentConfirmCard() {
         <button
           type="button"
           onClick={() => resolve(true)}
-          // accent 实底 + 白字：与 SegmentedControl 的激活档同口径（全仓无 --color-accent-fg 令牌）
+          // 主操作使用主题强调色，突出本次授权。
           className="px-2 py-0.5 text-xs rounded cursor-pointer bg-[var(--color-accent)] text-white"
         >
           {t('subagent.confirmAllow')}

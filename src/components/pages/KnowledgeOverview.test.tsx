@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { StrictMode, act, type ComponentProps } from 'react'
+import { StrictMode, act, useState, type ComponentProps } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import KnowledgeOverview from './KnowledgeOverview'
+import KnowledgeOverview, { type KnowledgeSection } from './KnowledgeOverview'
 import { useProjectStore } from '../../stores/project-store'
 import { globalEventBus } from '../../shared/event-bus'
 
@@ -34,9 +34,13 @@ let host: HTMLDivElement, root: Root
 let handler: (channel: string, ...args: unknown[]) => unknown
 const doc = { id: 'd', fileName: 'chapter_1.md', filePath: '/a/chapter_1.md', chunkCount: 1, importedAt: '' }
 async function flush(work: () => void = () => {}) { await act(async () => { work(); await Promise.resolve() }) }
+function KnowledgeOverviewFixture() {
+  const [section, setSection] = useState<KnowledgeSection>('overview')
+  return <KnowledgeOverview section={section} onSectionChange={setSection} />
+}
 async function mount(strict = false) {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
-  await flush(() => root.render(strict ? <StrictMode><KnowledgeOverview /></StrictMode> : <KnowledgeOverview />))
+  await flush(() => root.render(strict ? <StrictMode><KnowledgeOverviewFixture /></StrictMode> : <KnowledgeOverviewFixture />))
 }
 async function click(key: string) {
   const button = [...host.querySelectorAll('button')].find(button => button.textContent?.includes(key))
@@ -63,6 +67,21 @@ beforeEach(() => {
 afterEach(async () => { if (root) await flush(() => root.unmount()); host?.remove() })
 
 describe('knowledge overview application', () => {
+  it('clears completed and pending results after a committed removal in its own session', async () => {
+    await mount()
+    const base = handler
+    handler = channel => channel === 'kb:search' ? [{ text: 'REMOVED CONTENT', fileName: 'chapter_1.md', score: 1 }] : base(channel)
+    await search('chapter'); expect(host.textContent).toContain('REMOVED CONTENT')
+    const pending = deferred<unknown[]>()
+    handler = channel => channel === 'kb:search' ? pending.promise : base(channel)
+    await flush(() => h.inputs.query.onKeyDown!({ key: 'Enter' } as never))
+    await flush(() => globalEventBus.emit('KNOWLEDGE_DOCUMENT_REMOVED', { projectSession: 2 }))
+    expect(host.textContent).toContain('REMOVED CONTENT')
+    await flush(() => globalEventBus.emit('KNOWLEDGE_DOCUMENT_REMOVED', { projectSession: 1 }))
+    await flush(() => pending.resolve([{ text: 'LATE CONTENT', fileName: 'chapter_1.md', score: 1 }]))
+    expect(host.textContent).not.toContain('REMOVED CONTENT')
+    expect(host.textContent).not.toContain('LATE CONTENT')
+  })
   it.each(['edited', ''])('editing input to %j invalidates a pending search', async value => {
     const pending = deferred<unknown[]>()
     const base = handler; handler = channel => channel === 'kb:search' ? pending.promise : base(channel)

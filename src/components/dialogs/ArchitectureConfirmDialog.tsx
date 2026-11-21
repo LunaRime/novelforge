@@ -9,8 +9,9 @@ import {
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
+import { SemanticLabel } from '../ui/SemanticLabel'
 import { cn } from '../../lib/utils'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { getGenreTextKey, getAudienceTextKey } from '../../services/novel-config-normalize'
@@ -288,7 +289,7 @@ export default function ArchitectureConfirmDialog({
                       <label className="text-micro font-medium mb-1 block" style={{ color: 'var(--color-text-muted)' }}>
                         {f.label}
                       </label>
-                      <Textarea
+                      <MarkdownField startInEdit
                         value={stepGuidance[f.key] || ''}
                         onChange={e => setStepGuidance(prev => ({ ...prev, [f.key]: e.target.value }))}
                         placeholder={t('archConfirm.guidancePlaceholderFull').replace('{label}', f.label)}
@@ -304,7 +305,7 @@ export default function ArchitectureConfirmDialog({
 
           {noneSelected && (
             <p className="text-xs px-3 py-2 rounded-md" style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.1)', borderColor: 'rgba(var(--color-error-rgb), 0.2)', borderWidth: 1, color: 'var(--color-error)' }}>
-              ⚠️ {t('error.selectStep')}
+              <SemanticLabel name="warning">{t('error.selectStep')}</SemanticLabel>
             </p>
           )}
           {/* 前置校验失败提示 */}

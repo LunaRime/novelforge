@@ -10,6 +10,7 @@ import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import { EmptyState } from '../ui/EmptyState'
+import { Button } from '../ui/Button'
 import { useTranslation } from '../../hooks/useTranslation'
 
 interface SkillItem {
@@ -76,28 +77,19 @@ export default function SkillsSettings() {
   }, [t, loadSkills])
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 顶部操作栏 */}
-      <div className="flex items-center justify-between px-5 py-3 border-b border-[var(--color-border)] flex-shrink-0">
-        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-          {t('settings.skills')}
-          <span className="ml-2 text-xs opacity-50" style={{ color: 'var(--color-text-muted)' }}>
-            {skills.length}
-          </span>
+    <section className="nf-settings-panel space-y-3">
+      <header className="nf-settings-resource-bar">
+        <span className="rounded-md bg-[var(--color-editor-bg)] px-2 py-1 text-xs tabular-nums text-[var(--color-text-secondary)]" aria-label={t('settings.skills')}>
+          {skills.length}
         </span>
-        <button
-          type="button"
-          onClick={handleImport}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
-          style={{ color: '#fff', backgroundColor: 'var(--color-accent)' }}
-        >
-          <Upload size={12} />
+        <Button type="button" className="min-h-8" onClick={handleImport}>
+          <Upload size={14} aria-hidden="true" />
           {t('skill.import')}
-        </button>
-      </div>
+        </Button>
+      </header>
 
-      {/* 技能列表 */}
-      <div className="flex-1 overflow-y-auto p-4">
+      {/* 技能列表由设置窗口的内容区统一滚动。 */}
+      <div aria-busy={loading}>
         {loading ? (
           <div className="text-center py-8 text-xs opacity-40" style={{ color: 'var(--color-text-muted)' }}>
             {t('status.loading')}
@@ -106,14 +98,9 @@ export default function SkillsSettings() {
           /* 错误态与空态必须分开：失败渲染成「暂无技能」会让用户以为本来就没有 */
           <div className="text-center py-10 text-xs space-y-2">
             <div style={{ color: 'var(--color-error)' }}>{t('common.loadFailed')}</div>
-            <button
-              type="button"
-              className="px-3 py-1 rounded-lg text-xs transition-colors cursor-pointer"
-              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
-              onClick={() => void loadSkills()}
-            >
+            <Button type="button" variant="outline" onClick={() => void loadSkills()}>
               {t('action.retry')}
-            </button>
+            </Button>
           </div>
         ) : skills.length === 0 ? (
           <EmptyState
@@ -126,8 +113,7 @@ export default function SkillsSettings() {
             {skills.map(skill => (
               <div
                 key={skill.name}
-                className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border"
-                style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+                className="flex items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] px-3 py-2"
               >
                 <FileText size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
                 <div className="flex-1 min-w-0">
@@ -140,20 +126,15 @@ export default function SkillsSettings() {
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(skill.name)}
-                  className="flex-shrink-0 p-1.5 rounded-lg transition-colors cursor-pointer hover:bg-[var(--color-hover)]"
-                  style={{ color: 'var(--color-text-muted)' }}
-                  title={t('action.delete')}
-                >
-                  <Trash2 size={13} />
-                </button>
+                <Button type="button" variant="ghost" size="icon" className="size-[32px] shrink-0"
+                  onClick={() => handleDelete(skill.name)} title={t('action.delete')} aria-label={`${t('action.delete')} ${skill.name}`}>
+                  <Trash2 size={14} aria-hidden="true" />
+                </Button>
               </div>
             ))}
           </div>
         )}
       </div>
-    </div>
+    </section>
   )
 }

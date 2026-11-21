@@ -11,7 +11,7 @@ import {
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import type { NovelConfig } from '../../shared/ipc-channels'
 
 interface Props {
@@ -119,7 +119,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, config, isConfig
       if (!alive.current) return
       assertCurrent()
       onClose()
-      toast.info('✨ ' + t('genConfig.generating'))
+      toast.info(t('genConfig.generating'))
       addLog('info', t('genConfig.generatingLog').replace('{totalChapters}', String(totalChapters)).replace('{wordsPerChapter}', String(wordsPerChapter)))
     } catch (error) {
       if (!alive.current || error instanceof NovelConfigRequestCancelled) return
@@ -253,7 +253,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, config, isConfig
             >
               {t('genConfig.prompt')}
             </label>
-            <Textarea
+            <MarkdownField startInEdit
               autoFocus
               rows={5}
               placeholder={defaultIdea || t('genConfig.promptPlaceholder')}

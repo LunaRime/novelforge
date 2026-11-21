@@ -1,4 +1,4 @@
-import { BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readJsonFile, writeJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, NOVELFORGE_HOME } from '../utils/config-utils'
@@ -8,9 +8,12 @@ import { t, setCurrentLocale, type SupportedLocale } from '../../src/shared/loca
 import { GlobalConfig, type LogEnvMode, type LogFileInfo } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 import { refreshOutboundProxy } from '../net/proxy-fetch'
+import { collectFeedbackErrors } from '../utils/feedback-logs'
+import { ZipWriter } from '../utils/zip-writer'
 
 /** 窗口控件覆盖层高度（px）—— 与 main.ts 建窗时的取值必须一致，否则按钮条与内容错位 */
-export const TITLEBAR_OVERLAY_HEIGHT = 32
+// 原生窗控与渲染层使用同一高度，渲染层从 titlebar-area-height 读取。
+export const TITLEBAR_OVERLAY_HEIGHT = 44
 
 /** 渲染进程日志等级字符串 → 主进程 LogLevel 映射 */
 const RENDER_LOG_LEVELS: Record<'debug' | 'info' | 'warn' | 'error', LogLevel> = {
@@ -161,6 +164,45 @@ export function registerConfigController() {
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }
     }
+  })
+
+  /** 导出路径来自系统保存对话框，渲染端只能请求生成当前应用的诊断包。 */
+  guardedHandle('log:export-feedback', async event => {
+    try {
+      const entries = await collectFeedbackErrors(Object.values(LOG_DIRS))
+      if (entries.length === 0) return { status: 'empty' as const }
+      const win = BrowserWindow.fromWebContents(event.sender)
+      const createdAt = new Date().toISOString()
+      const options = {
+        title: t('support.feedbackExport'),
+        defaultPath: `NovelForge-feedback-${createdAt.slice(0, 10)}.zip`,
+        filters: [{ name: 'ZIP', extensions: ['zip'] }],
+      }
+      const result = win && !win.isDestroyed() ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+      if (result.canceled || !result.filePath) return { status: 'cancelled' as const }
+      if (path.extname(result.filePath).toLowerCase() !== '.zip') return { status: 'failed' as const }
+
+      const archive = new ZipWriter()
+      archive.addFile('error-log.txt', entries.join('\n') + '\n')
+      archive.addFile('diagnostics.json', JSON.stringify({
+        application: 'NovelForge',
+        version: app.getVersion(),
+        platform: process.platform,
+        arch: process.arch,
+        createdAt,
+        errorCount: entries.length,
+      }, null, 2))
+      await archive.writeToFile(result.filePath)
+      return { status: 'saved' as const, path: result.filePath, count: entries.length }
+    } catch (error) {
+      logger.warn('Support', `Feedback export failed: ${safeErrorMessage(error)}`)
+      return { status: 'failed' as const }
+    }
+  })
+
+  guardedHandle('log:open-issues', async () => {
+    await shell.openExternal('https://github.com/LunaRime/novelforge/issues/new/choose')
+    return { success: true }
   })
 
   /** 记录前端日志（渲染进程通过 IPC 写入；level 为字符串，主进程映射到 LogLevel） */

@@ -32,7 +32,7 @@ describe('CountBadge — 计数徽标', () => {
     expect((el.firstElementChild as HTMLElement).className).toContain('tabular-nums')
   })
 
-  it('progress：按比例绘制 2px 进度条；无 total 时不渲染', () => {
+  it('progress：按比例绘制轨道；无 total 时不渲染', () => {
     const withProgress = render(<CountBadge value={2} total={4} progress tone="warning" />)
     const bar = withProgress.querySelector('[data-count-progress]') as HTMLElement
     expect(bar).toBeTruthy()

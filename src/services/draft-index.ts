@@ -25,6 +25,7 @@ export interface DraftMeta {
   wordCount?: number
   createdAt: number
   updatedAt?: number
+  contentHash?: string
   source: 'write' | 'rewrite'
 }
 

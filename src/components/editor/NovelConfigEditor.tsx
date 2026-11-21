@@ -1,3 +1,4 @@
+import { handleSaveShortcut, useSaveShortcutTitle } from '../../lib/save-shortcut'
 import { FeatureSplit } from '../ui/FeatureSplit'
 import MenuRow from '../ui/MenuRow'
 
@@ -11,7 +12,7 @@ import type { GeneratableField } from '../../services/workflows/commands/generat
 import { Button } from '../ui/Button'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import { Input } from '../ui/Input'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
 import { createRendererNovelConfigApplication } from '../../services/config/novel-config-adapter'
@@ -39,6 +40,7 @@ export default function NovelConfigEditor() {
 
 function NovelConfigContent({ source }: { source: NovelConfigScope }) {
   const { t } = useTranslation()
+  const saveTitle = useSaveShortcutTitle()
   const [application] = useState(() => createRendererNovelConfigApplication(source))
   const mounted = useRef(true)
   const lifetime = useRef({ generation: 0 })
@@ -161,7 +163,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
+    <div className="h-full min-h-0 flex flex-col" onKeyDown={event => handleSaveShortcut(event, handleSave, !saving)}>
       <div className="w-full min-w-0 px-4 py-3">
         {/* 头部 */}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -177,7 +179,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
             <Button variant="ai" onClick={handleAIGenerate}>
               <Sparkles size={13} /> {t('tip.aiGeneratedConfig')}
             </Button>
-            <Button variant="outline" onClick={handleSave} disabled={saving}>
+            <Button variant="outline" onClick={handleSave} disabled={saving} title={saveTitle}>
               <Save size={13} /> {saving ? t('status.saving') : t('action.save')}
             </Button>
           </div>
@@ -292,7 +294,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
             generatingField={generatingField}
             onAIGenerate={handleFieldGenerate}
           >
-            <Textarea value={config.coreOutline} onChange={(e) => update('coreOutline', e.target.value)} placeholder={t('novelConfig.coreOutlinePlaceholder')} rows={4} />
+            <MarkdownField value={config.coreOutline} onChange={(e) => update('coreOutline', e.target.value)} placeholder={t('novelConfig.coreOutlinePlaceholder')} rows={4} />
           </Section>
 
           {/* 世界观设定 */}
@@ -303,7 +305,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
             generatingField={generatingField}
             onAIGenerate={handleFieldGenerate}
           >
-            <Textarea value={config.worldSetting} onChange={(e) => update('worldSetting', e.target.value)} placeholder={t('novelConfig.worldSettingPlaceholder')} rows={4} />
+            <MarkdownField value={config.worldSetting} onChange={(e) => update('worldSetting', e.target.value)} placeholder={t('novelConfig.worldSettingPlaceholder')} rows={4} />
           </Section>
 
           {/* 金手指 */}
@@ -314,7 +316,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
             generatingField={generatingField}
             onAIGenerate={handleFieldGenerate}
           >
-            <Textarea value={config.goldenFinger} onChange={(e) => update('goldenFinger', e.target.value)} placeholder={t('novelConfig.cheatPlaceholder')} rows={3} />
+            <MarkdownField value={config.goldenFinger} onChange={(e) => update('goldenFinger', e.target.value)} placeholder={t('novelConfig.cheatPlaceholder')} rows={3} />
           </Section>
 
           {/* 主角人设 */}
@@ -325,7 +327,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
             generatingField={generatingField}
             onAIGenerate={handleFieldGenerate}
           >
-            <Textarea value={config.protagonistProfile} onChange={(e) => update('protagonistProfile', e.target.value)} placeholder={t('novelConfig.protagonistPlaceholder')} rows={4} />
+            <MarkdownField value={config.protagonistProfile} onChange={(e) => update('protagonistProfile', e.target.value)} placeholder={t('novelConfig.protagonistPlaceholder')} rows={4} />
           </Section>
 
           {/* 全局写作要求 */}
@@ -336,7 +338,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
             generatingField={generatingField}
             onAIGenerate={handleFieldGenerate}
           >
-            <Textarea
+            <MarkdownField
               value={config.globalGuidance}
               onChange={(e) => update('globalGuidance', e.target.value)}
               placeholder={t('novelConfig.globalWritingPlaceholder')}
@@ -352,7 +354,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
             generatingField={generatingField}
             onAIGenerate={handleFieldGenerate}
           >
-            <Textarea
+            <MarkdownField
               value={config.writingStyle || ''}
               onChange={(e) => update('writingStyle', e.target.value)}
               placeholder={t('novelConfig.stylePlaceholder')}
@@ -362,7 +364,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
 
           {/* 参考作品 */}
           <Section hidden={section !== 7} title={t('novelConfig.referenceWorks')} desc={t('novelConfig.referenceWorksDesc')}>
-            <Textarea value={config.referenceWorks || ''} onChange={(e) => update('referenceWorks', e.target.value)} placeholder={t('novelConfig.referenceWorksPlaceholder')} rows={2} />
+            <MarkdownField value={config.referenceWorks || ''} onChange={(e) => update('referenceWorks', e.target.value)} placeholder={t('novelConfig.referenceWorksPlaceholder')} rows={2} />
           </Section>
         </div>
       </FeatureSplit>

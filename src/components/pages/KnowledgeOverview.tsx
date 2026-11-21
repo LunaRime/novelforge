@@ -1,5 +1,4 @@
-import { FeatureSplit } from '../ui/FeatureSplit'
-import MenuRow from '../ui/MenuRow'
+import { ViewTabs } from '../ui/ChoiceControls'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Database, BookOpen, FileText,
@@ -23,11 +22,18 @@ import { createRendererKnowledgeExportApplication } from '../../services/knowled
 import { renderLog } from '../../services/render-logger'
 import ChapterExportDialog from '../dialogs/ChapterExportDialog'
 
+export type KnowledgeSection = 'overview' | 'search'
+
+interface KnowledgeNavigation {
+  section: KnowledgeSection
+  onSectionChange: (section: KnowledgeSection) => void
+}
+
 /**
  * 知识库概览页面 — LanceDB 向量数据库的管理中心
  * 当侧栏视图为"知识库"时，作为中间编辑区的固定内容展示。
  */
-export default function KnowledgeOverview() {
+export default function KnowledgeOverview(navigation: KnowledgeNavigation) {
   const project = useProjectStore(s => s.currentProject)
   const session = useProjectStore(s => s.projectSession)
   const { t } = useTranslation()
@@ -43,10 +49,10 @@ export default function KnowledgeOverview() {
       </div>
     </div>
   )
-  return <KnowledgeOverviewContent key={`${project.id}:${project.path}:${session}`} source={{ id: project.id, path: project.path, session }} />
+  return <KnowledgeOverviewContent key={`${project.id}:${project.path}:${session}`} source={{ id: project.id, path: project.path, session }} {...navigation} />
 }
 
-function KnowledgeOverviewContent({ source }: { source: { id: string; path: string; session: number } }) {
+function KnowledgeOverviewContent({ source, section, onSectionChange }: KnowledgeNavigation & { source: { id: string; path: string; session: number } }) {
   const [application] = useState(() => createRendererKnowledgeApplication(source))
   const [maintenance] = useState(() => createRendererKnowledgeMaintenanceApplication(source))
   const [exportApplication] = useState(() => createRendererKnowledgeExportApplication(source))
@@ -65,8 +71,6 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [searchEmpty, setSearchEmpty] = useState(false)
-  const [section, setSection] = useState<'overview' | 'search'>('overview')
-  const [detailOpen, setDetailOpen] = useState(false)
   const [topK, setTopK] = useState(10)
   const [vectorlessCount, setVectorlessCount] = useState(0)
   const [backfilling, setBackfilling] = useState(false)
@@ -122,17 +126,22 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
   useEffect(() => {
     queueMicrotask(() => { if (active()) { void loadData(); void checkVectorless() } })
   }, [loadData, checkVectorless, active])
+  const cancelSearch = useCallback(() => {
+    searchSequence.current++; application.cancelSearch(); setSearchResults([]); setSearching(false); setSearchEmpty(false)
+  }, [application])
   useEffect(() => {
     const refresh = () => { void loadData(); void checkVectorless() }
     const unsub1 = globalEventBus.on('REFRESH_RESOURCE', (payload: { resources: string[] }) => {
       if (payload.resources.includes('all') || payload.resources.includes('fileTree')) refresh()
     })
     const unsub2 = globalEventBus.on('FINALIZE_COMPLETE', refresh)
-    return () => { unsub1(); unsub2() }
-  }, [loadData, checkVectorless])
-  const cancelSearch = () => {
-    searchSequence.current++; application.cancelSearch(); setSearchResults([]); setSearching(false); setSearchEmpty(false)
-  }
+    const unsub3 = globalEventBus.on('KNOWLEDGE_DOCUMENT_REMOVED', ({ projectSession }) => {
+      if (projectSession !== source.session || !active()) return
+      cancelSearch()
+      refresh()
+    })
+    return () => { unsub1(); unsub2(); unsub3() }
+  }, [loadData, checkVectorless, cancelSearch, source.session, active])
   const handleSearch = async () => {
     const sequence = ++searchSequence.current
     setSearching(true)
@@ -188,16 +197,14 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
   const searchMode = hasVectors ? t('knowledge.fusion') : t('knowledge.bm25')
 
   return (
-    <div className="h-full min-h-0 flex flex-col" style={{ backgroundColor: 'var(--color-editor-bg)' }}>
-      <div className="w-full min-w-0 px-4 py-3">
-
-        {/* ===== 标题 ===== */}
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--color-panel)]">
+      {/* 管理操作与检索切换留在页首，正文区域独立滚动。 */}
+      <header className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-editor-bg)] px-4 pt-4 pb-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-hover))' }}
+            className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--color-panel)] text-[var(--color-accent)]"
           >
-            <Database size={20} className="text-white" />
+            <Database size={18} aria-hidden="true" />
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-bold text-[var(--color-text)]">{t('nav.knowledgeBase')}</h2>
@@ -238,15 +245,13 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
           )}
         </div>
 
-      </div>
-      <FeatureSplit detailOpen={detailOpen} onBack={() => setDetailOpen(false)} list={
-        (['overview', 'search'] as const).map(view => (
-          <MenuRow key={view} title={t(view === 'overview' ? 'knowledge.overview' : 'knowledge.semanticSearch')}
-            current={section === view ? 'page' : undefined} active={section === view}
-            onPrimary={() => { setSection(view); setDetailOpen(true) }} />
-        ))
-      }>
-        <div className="flex-1 min-h-0 overflow-y-auto p-3">
+        <ViewTabs<KnowledgeSection> value={section} onChange={onSectionChange} className="mt-3 w-fit max-w-full"
+          items={[
+            { value: 'overview', label: t('knowledge.overview') },
+            { value: 'search', label: t('knowledge.semanticSearch') },
+          ]} />
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <section hidden={section !== 'overview'}>
         {/* 加载失败横幅：统计卡片全 0 不等于「没有数据」，必须区分 */}
         {loadFailed && (
@@ -337,8 +342,6 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
           style={{ backgroundColor: 'var(--color-sidebar)' }}
         >
           <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
-            <Search size={14} className="text-[var(--color-accent)] flex-shrink-0" />
-            <span className="text-sm font-semibold text-[var(--color-text)]">{t('knowledge.semanticSearch')}</span>
             <Badge variant={hasVectors ? 'success' : 'info'} className="px-1.5">
               {searchMode}
             </Badge>
@@ -349,21 +352,23 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
           <div className="px-4 py-3">
             <div className="flex flex-wrap items-center gap-2">
               <Input
-                className="flex-1 h-9"
+                className="flex-1 h-9 min-w-32"
+                aria-label={t('knowledge.semanticSearch')}
                 placeholder={t('knowledge.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => { cancelSearch(); setSearchQuery(e.target.value) }}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
-              <div className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex shrink-0 items-center gap-2">
                 <span className="text-micro text-[var(--color-text-muted)]">{t('knowledge.topK')}</span>
                 <Input
                   type="number"
+                  aria-label={t('knowledge.topK')}
                   min={1}
                   max={50}
                   value={topK}
                   onChange={(e) => { cancelSearch(); setTopK(Math.max(1, Math.min(50, Number(e.target.value) || 10))) }}
-                  className="w-12 h-7 text-xs rounded px-1.5 text-center"
+                  className="h-9 w-[4.5rem] tabular-nums"
                 />
               </div>
               <Button
@@ -428,7 +433,6 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
 
         </section>
         </div>
-      </FeatureSplit>
 
       {/* 章节导出对话框 */}
       <ChapterExportDialog

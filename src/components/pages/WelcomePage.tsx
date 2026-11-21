@@ -1,9 +1,10 @@
 import { useState, type ReactNode } from 'react'
-import { ArrowRight, FileUp, FolderOpen, PenLine, Settings, Sparkles, X } from 'lucide-react'
+import { ArrowRight, Clock, FileUp, FolderOpen, PenLine, Settings, X } from 'lucide-react'
 import appIcon from '../../../build/icon.png'
 import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { Button } from '../ui/Button'
+import './welcome.css'
 
 const FIRST_RUN_KEY = 'vela-first-run'
 
@@ -18,7 +19,7 @@ function isFirstRun(): boolean {
 function markFirstRunDone(): void {
   try {
     localStorage.setItem(FIRST_RUN_KEY, 'done')
-  } catch { /* ignore */ }
+  } catch { /* 无法持久化时，本次仍可关闭引导。 */ }
 }
 
 interface WelcomePageProps {
@@ -29,24 +30,26 @@ interface WelcomePageProps {
   onStartCreate?: () => void
 }
 
-/** Recent projects remain available in the Home sidebar. */
+/** 欢迎页提供创作入口，主页侧栏负责完整的项目管理列表。 */
 export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel, onOpenSettings, onStartCreate }: WelcomePageProps) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
+  const recentProject = useProjectStore(s => s.recentProjects[0])
   const [showGuide, setShowGuide] = useState(isFirstRun)
   const [opening, setOpening] = useState(false)
   const [failedToOpen, setFailedToOpen] = useState(false)
+  const primaryLabel = t(currentProject ? 'chapter.newChapter' : 'welcome.newProject')
 
   const dismissGuide = () => {
     setShowGuide(false)
     markFirstRunDone()
   }
 
-  async function openProject() {
+  async function openProject(open: () => void | Promise<unknown>) {
     setFailedToOpen(false)
     setOpening(true)
     try {
-      await onOpenProject()
+      await open()
     } catch {
       setFailedToOpen(true)
     } finally {
@@ -55,32 +58,49 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
   }
 
   return (
-    <div className="h-full w-full overflow-y-auto bg-[var(--color-editor-bg)]">
-      <div className="mx-auto w-full max-w-xl px-[clamp(1rem,4cqi,2rem)] py-8">
-        <header className="mb-8 text-center">
-          <img src={appIcon} alt="" width={72} height={72} className="mx-auto mb-4" />
-          <h1 className="mb-2 break-words text-2xl font-semibold text-[var(--color-text)]">
-            {currentProject ? currentProject.name : t('welcome.title')}
-          </h1>
-          <p className="break-words text-sm text-[var(--color-text-secondary)]">
-            {currentProject ? currentProject.path : t('welcome.subtitle')}
-          </p>
+    <div className="nf-welcome">
+      <div className="nf-welcome-sheet">
+        <header className="nf-welcome-hero">
+          <div className="nf-welcome-copy">
+            <h1>{currentProject?.name ?? t('welcome.title')}</h1>
+            <p>{currentProject?.path ?? t('welcome.subtitle')}</p>
+            <Button type="button" variant="default" className="min-h-9 whitespace-normal text-left"
+              aria-label={primaryLabel}
+              onClick={currentProject ? onStartCreate ?? onNewProject : onNewProject}>
+              <PenLine size={16} className="shrink-0" aria-hidden="true" />
+              {primaryLabel}
+            </Button>
+          </div>
+          {/* 定稿标志嵌入封面。折角和下方工作台的页签采用同一品牌色。 */}
+          <div className="nf-welcome-cover" aria-hidden="true">
+            <img src={appIcon} alt="" width={104} height={104} />
+          </div>
         </header>
 
-        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-3">
-          <WelcomeAction label={t('welcome.newProject')} description={t('welcome.createNovel')}
-            icon={<Sparkles size={18} />} onClick={onNewProject} primary />
+        <div className="nf-welcome-actions">
+          {currentProject && (
+            <WelcomeAction label={t('welcome.newProject')} description={t('welcome.createNovel')}
+              icon={<PenLine size={18} />} onClick={onNewProject} />
+          )}
           <WelcomeAction label={t('welcome.openProject')} description={t('welcome.openExisting')}
-            icon={<FolderOpen size={18} />} onClick={() => void openProject()} disabled={opening} />
+            icon={<FolderOpen size={18} />} onClick={() => void openProject(onOpenProject)} disabled={opening} />
           {onImportNovel && (
             <WelcomeAction label={t('welcome.importNovel')} description={t('welcome.importExisting')}
               icon={<FileUp size={18} />} onClick={onImportNovel} />
           )}
         </div>
+        {!currentProject && recentProject && (
+          <div className="nf-welcome-recent">
+            <h2>{t('project.recent')}</h2>
+            <WelcomeAction label={recentProject.name} description={recentProject.path}
+              icon={<Clock size={18} />} disabled={opening}
+              onClick={() => void openProject(() => useProjectStore.getState().openProject(recentProject.path))} />
+          </div>
+        )}
         {failedToOpen && <p role="alert" className="mt-3 text-sm text-[var(--color-error)]">{t('dialog.openFailed')}</p>}
 
         {showGuide && (
-          <section className="mt-8 rounded-xl border border-[var(--color-border)] bg-[var(--color-sidebar)] p-4">
+          <section className="nf-welcome-guide">
             <div className="mb-3 flex items-center justify-between gap-2">
               <h2 className="text-sm font-semibold text-[var(--color-text)]">{t('welcome.quickStart')}</h2>
               <Button type="button" variant="ghost" size="icon" onClick={dismissGuide}
@@ -103,23 +123,23 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
   )
 }
 
-function WelcomeAction({ label, description, icon, onClick, disabled, primary }: {
+function WelcomeAction({ label, description, icon, onClick, disabled }: {
   label: string
   description: string
   icon: ReactNode
   onClick: () => void
   disabled?: boolean
-  primary?: boolean
 }) {
   return (
     <Button type="button" variant="outline" onClick={onClick} disabled={disabled}
       aria-label={label} title={description}
-      className="h-auto min-w-0 justify-start gap-3 whitespace-normal rounded-lg px-3 py-3 text-left">
-      <span aria-hidden="true" className={primary ? 'shrink-0 text-[var(--color-accent)]' : 'shrink-0'}>{icon}</span>
+      className="nf-welcome-action h-auto min-w-0 justify-start gap-3 whitespace-normal rounded-lg px-3 py-3 text-left">
+      <span aria-hidden="true" className="nf-welcome-action-icon">{icon}</span>
       <span className="min-w-0">
         <span className="block break-words text-sm font-semibold">{label}</span>
-        <span className="mt-1 block break-words text-xs font-normal text-[var(--color-text-muted)]">{description}</span>
+        <span className="mt-1 block break-words text-xs font-normal text-[var(--color-text-secondary)]">{description}</span>
       </span>
+      <ArrowRight size={15} className="ms-auto shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
     </Button>
   )
 }

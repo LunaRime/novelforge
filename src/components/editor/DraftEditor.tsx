@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 
 import { useTranslation } from '../../hooks/useTranslation'
@@ -6,6 +7,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import CodeMirrorEditor from './CodeMirrorEditor'
+import { saveFinalizedUnderline } from './save-finalized-underline'
 import ThreeWayMerge from './ThreeWayMerge'
 import EditorToolbar from './EditorToolbar'
 import AIActionDialog, { getReviewDims } from './AIActionDialog'
@@ -40,6 +42,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   const currentProject = useProjectStore(s => s.currentProject)
   const projectSession = useProjectStore(s => s.projectSession)
   const application = useMemo(() => createRendererDraftEditorApplication(currentProject, projectSession, t), [currentProject, projectSession, t])
+  const [textToolsHost, setTextToolsHost] = useState<HTMLDivElement | null>(null)
   const [meta, setMeta] = useState<(DraftMeta & { chapterTitle?: string }) | null>(null)
   const [pendingRevisions, setPendingRevisions] = useState<RevisionEntry[]>([])
   const [reviewCount, setReviewCount] = useState(0)
@@ -288,9 +291,10 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   const handleEditorSave = useCallback((text: string) => doSave(text, { manual: true }), [doSave])
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* 工具栏 — 提取到 EditorToolbar */}
+    <div className="h-full flex flex-col overflow-hidden" onKeyDown={event => handleSaveShortcut(event, handleToolbarSave, !isReadonly && isDirty && !saving)}>
+      {/* 当前稿件的写作、保存与版本操作集中在章头上方。 */}
       <EditorToolbar
+        textToolsRef={setTextToolsHost}
         meta={meta}
         charCount={charCount}
         isDirty={isDirty}
@@ -325,11 +329,12 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
       <div className="flex-1 overflow-hidden relative">
         <CodeMirrorEditor
           tabId={tabId}
+          textToolsHost={textToolsHost}
           mode="prose"
           paperHeading={meta && <>
             <div className="nf-prose-meta">
               <span>{t('chapter.label').replace('{n}', String(meta.chapterNumber))}</span>
-              <span>v{meta.version}</span>
+              <span className="nf-prose-version">v{meta.version}</span>
             </div>
             <h1>{meta.chapterTitle}</h1>
           </>}
@@ -338,8 +343,10 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
           editable={!isReadonly && !isChapterBusy}
           hideStatusBar
           onCharCountChange={setCharCount}
-          onChange={handleEditorChange}
-          onSave={handleEditorSave}
+          onChange={isReadonly ? undefined : handleEditorChange}
+          onSave={isReadonly || saving || !isDirty ? undefined : handleEditorSave}
+          onSaveUnderline={status === 'finalized' && !isChapterBusy
+            ? (before, after) => saveFinalizedUnderline(filePath, projectSession, before, after) : undefined}
         />
       </div>
 

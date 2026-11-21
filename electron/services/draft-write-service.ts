@@ -1,5 +1,7 @@
 import { commitDraftContent, commitDraftFinalization } from '../../src/core'
 import type { DraftContentWrite, DraftFinalizationInput, DraftFinalizationResult, DraftWriteResult } from '../../src/core'
+import type { DatabaseChannels } from '../../src/shared/ipc-channels'
+import { stripMarkdownUnderline } from '../../src/shared/markdown-underline'
 import { getCurrentProjectPath, getProjectDb } from '../database'
 import { DraftRepository } from '../repositories/draft-repository'
 import { DraftSnapshotRepository } from '../repositories/draft-snapshot-repository'
@@ -55,6 +57,39 @@ export function commitDatabaseDraftFinalization(
     })
     if (result.success && !result.alreadyFinalized) autoSnapshot(input.draftId)
     return result
+  } catch (error) {
+    return { success: false, error: String(error) }
+  }
+}
+
+/** 正式稿只接受显示格式调整。正文比较和写入共用一个事务。 */
+type FinalizedUnderlineChannel = DatabaseChannels['db:draft-format-underline']
+
+export function commitDatabaseFinalizedUnderline(
+  input: FinalizedUnderlineChannel['args'][0],
+): FinalizedUnderlineChannel['return'] {
+  const db = getProjectDb()
+  if (!db) return { success: false, error: 'project-db-not-connected' }
+  if (!input?.projectPath || input.projectPath !== getCurrentProjectPath() ||
+      (input.writeToken !== undefined && input.writeToken !== captureProjectWriteScope().token)) {
+    return { success: false, error: 'project-scope-changed' }
+  }
+  if (!Number.isSafeInteger(input.draftId) || input.draftId < 1 || typeof input.content !== 'string' ||
+      typeof input.expectedContent !== 'string') return { success: false, error: 'invalid-draft-write' }
+
+  try {
+    return db.transaction((): FinalizedUnderlineChannel['return'] => {
+      const before = DraftRepository.getFull(input.draftId)
+      if (!before) return { success: false, error: 'draft-not-found' }
+      if (before.status !== 'finalized') return { success: false, error: 'draft-not-finalized' }
+      if (before.content !== input.expectedContent) return { success: false, conflict: true }
+      if (before.content === input.content) return { success: true, chapterNumber: before.chapterNumber }
+      if (stripMarkdownUnderline(before.content) !== stripMarkdownUnderline(input.content)) {
+        return { success: false, error: 'draft-underline-only' }
+      }
+      const result = DraftRepository.applyContentIfUnchanged(before.id, before.contentHash, before.updatedAt, input.content, before.wordCount)
+      return result.ok ? { success: true, chapterNumber: before.chapterNumber } : { success: false, conflict: result.conflict }
+    })()
   } catch (error) {
     return { success: false, error: String(error) }
   }

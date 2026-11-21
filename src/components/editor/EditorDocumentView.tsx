@@ -1,3 +1,4 @@
+import { handleSaveShortcut, useSaveShortcutTitle } from '../../lib/save-shortcut'
 import { RefreshCw, Save } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -10,7 +11,10 @@ import { computeTextStats } from '../../services/text-stats'
 import { readVelaContent, VELA } from '../../services/vela-protocol'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useMemoryStore } from '../../stores/memory-store'
+import { useProjectStore } from '../../stores/project-store'
 import { clearChapterTitleCache } from '../panels/Sidebar'
+import { Button } from '../ui/Button'
+import MarkdownContent from '../ui/MarkdownContent'
 import { confirm } from '../ui/Confirm'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
@@ -18,6 +22,7 @@ import ArchFileViewer from './ArchFileViewer'
 import ChapterCardEditor from './ChapterCardEditor'
 import CharacterEditor from './CharacterEditor'
 import CodeMirrorEditor from './CodeMirrorEditor'
+import { saveFinalizedUnderline } from './save-finalized-underline'
 import DraftEditor from './DraftEditor'
 import ManuscriptBoard from './ManuscriptBoard'
 import NovelConfigEditor from './NovelConfigEditor'
@@ -37,10 +42,14 @@ function ProseEditorWrapper({
   onSave: (text: string) => Promise<void>
 }) {
   const { t } = useTranslation()
+  const saveTitle = useSaveShortcutTitle()
+  const [textToolsHost, setTextToolsHost] = useState<HTMLDivElement | null>(null)
   const [wordCount, setWordCount] = useState(0)
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const fileName = tab.name
+  const projectSession = useProjectStore(s => s.projectSession)
+  const manuscriptPath = tab.filePath?.startsWith(VELA.MANUSCRIPT) ? tab.filePath : undefined
   // 追踪当前编辑器内容，供保存按钮使用（不触发重渲染）
   const currentContentRef = useRef(tab.content ?? '')
 
@@ -90,58 +99,49 @@ function ProseEditorWrapper({
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {/* 顶部信息栏（背景与编辑区一致） */}
-      <div
-        className="flex items-center justify-between px-3 h-9 flex-shrink-0"
-        style={{
-          borderBottom: '1px solid var(--color-border)',
-          backgroundColor: 'var(--color-editor-bg)',
-        }}
-      >
+    <div className="h-full flex flex-col overflow-hidden"
+      onKeyDown={event => handleSaveShortcut(event, () => handleSave(currentContentRef.current), !manuscriptPath && !!tab.dirty && !saving)}>
+      <div className="nf-document-toolbar" role="group" aria-label={t('panel.editor')}>
         {/* 左侧：文件名 */}
         <span className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
           {fileName}
         </span>
 
         {/* 右侧：字数 + dirty 指示灯 + 保存按钮 */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="nf-document-actions">
           {wordCount > 0 && (
             <span className="text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
               {wordCount.toLocaleString()} {t('unit.chars')}
             </span>
           )}
           {/* 未保存圆点指示灯 */}
-          {tab.dirty && (
+          {tab.dirty && !manuscriptPath && (
             <span
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: 'var(--color-warning)' }}
+              className="nf-document-dirty"
               title={t('statusbar.unsaved')}
             />
           )}
           {/* 刷新：从 DB/磁盘重新读当前 Tab，不重开文件 */}
-          <button
-            className="icon-btn"
-            style={{ width: 24, height: 22 }}
+          <Button type="button" variant="ghost" size="icon" className="size-8"
             onClick={() => void handleRefresh()}
             disabled={refreshing}
             title={t('editor.refresh')}
             aria-label={t('editor.refresh')}
           >
             <RefreshCw size={13} strokeWidth={1.5} className={refreshing ? 'animate-spin' : ''} />
-          </button>
+          </Button>
           {/* 保存按钮（有改动时显示） */}
           {tab.dirty && (
-            <button
-              className="icon-btn"
-              style={{ width: 24, height: 22 }}
+            <Button type="button" variant="default" size="icon" className="size-8"
               onClick={() => handleSave(currentContentRef.current)}
               disabled={saving}
-              title={t('tip.saveShortcut')}
+              title={saveTitle}
+              aria-label={t('editor.save')}
             >
               <Save size={13} strokeWidth={1.5} />
-            </button>
+            </Button>
           )}
+          {tab.type === 'chapter' && <div ref={setTextToolsHost} className="shrink-0" />}
         </div>
       </div>
 
@@ -149,25 +149,25 @@ function ProseEditorWrapper({
       <div className="flex-1 overflow-hidden">
         <CodeMirrorEditor
           key={tab.id}
+          textToolsHost={textToolsHost}
           mode="prose"
           paperHeading={tab.type === 'chapter' ? <h1>{tab.name}</h1> : undefined}
           content={tab.content ?? ''}
           filePath={tab.filePath}
           hideStatusBar
-          // QA 修复（正式稿只读）：vela://manuscript/{id} 是 DB 定稿行，只读保护定稿内容
-          // 不被误改/串库；物理路径终稿文件仍可编辑
-          editable={!tab.filePath?.startsWith('vela://manuscript/')}
+          editable={!manuscriptPath}
+          onSaveUnderline={manuscriptPath ? (before, after) => saveFinalizedUnderline(manuscriptPath, projectSession, before, after) : undefined}
           onCharCountChange={(n) => {
             setWordCount(n)
             useEditorStore.getState().setActiveCharCount(n)
           }}
-          onChange={(text) => {
+          onChange={manuscriptPath ? undefined : (text) => {
             // 同步 ref，供保存按钮使用
             currentContentRef.current = text
             // 标记 tab.dirty
             useEditorStore.getState().updateTabContent(tab.id, text)
           }}
-          onSave={(text) => handleSave(text)}
+          onSave={manuscriptPath || saving || !tab.dirty ? undefined : handleSave}
         />
       </div>
     </div>
@@ -190,8 +190,6 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
         />
       )}
       {activeTab?.type === 'chapter' && !activeTab.filePath?.startsWith(VELA.DRAFT) && (
-        // 终稿文件：vela://manuscript/{id}（DB 定稿行）或物理路径 → ProseEditorWrapper（含字数信息栏）
-        // 保存链见 onSave：manuscript 前缀写 DB（drafts 行），物理路径才走 fs:write-file
         <ProseEditorWrapper
           key={activeTab.id}
           tab={activeTab}
@@ -201,19 +199,8 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
             //   是 try/finally（无 catch）。因此这里必须自己兜住失败：否则写盘失败后仍然
             //   markTabSaved() → 页签显示已保存、dirty 被清 → 内容没落盘却无人知晓（静默丢稿）。
             try {
-              if (activeTab.filePath.startsWith(VELA.MANUSCRIPT)) {
-                // vela://manuscript/{id}：定稿内容在 DB（drafts 行），伪协议无物理文件
-                // —— 不能走 fs:write-file（会被当作相对路径写到错误位置，内容丢失）
-                const idRaw = activeTab.filePath.replace(VELA.MANUSCRIPT, '')
-                if (/^\d+$/.test(idRaw)) {
-                  // wordCount 用统一"有效字数"口径
-                  const res = await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, computeTextStats(text).novelWordCount)
-                  if (!res.success) throw new Error(res.error ?? t('status.unknown'))
-                }
-              } else {
-                const res = await ipc.invoke('fs:write-file', activeTab.filePath, text)
-                if (!res.success) throw new Error(res.error ?? t('status.unknown'))
-              }
+              const res = await ipc.invoke('fs:write-file', activeTab.filePath, text)
+              if (!res.success) throw new Error(res.error ?? t('status.unknown'))
             } catch (e) {
               renderLog('error', 'Save:Editor', t('log.render.draftSaveFailed')
                 .replace('{path}', () => activeTab.filePath ?? '')
@@ -273,13 +260,8 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
         <NovelConfigEditor />
       )}
       {activeTab?.type === 'outline' && (
-        <div className="h-full overflow-y-auto p-6">
-          <pre
-            className="text-sm whitespace-pre-wrap font-mono leading-6"
-            style={{ color: 'var(--color-text)' }}
-          >
-            {activeTab.content || t('status.loading')}
-          </pre>
+        <div className="h-full w-full overflow-y-auto p-6 text-sm">
+          <MarkdownContent content={activeTab.content || t('status.loading')} document />
         </div>
       )}
       {activeTab?.type === 'character' && (
@@ -317,10 +299,8 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
       {activeTab?.type === 'publication' && (
         /* 平台章节正文（连载监控）：只读整幅展示 —— 正文随 db:publication-list 已返回，
            侧栏行点击只做导航（与记忆文件同一约定：编辑器是唯一查看面） */
-        <div className="h-full overflow-y-auto p-6">
-          <div className="text-sm leading-7 whitespace-pre-wrap" style={{ color: 'var(--color-text)' }}>
-            {activeTab.content || ''}
-          </div>
+        <div className="h-full w-full overflow-y-auto p-6 text-sm">
+          <MarkdownContent content={activeTab.content || ''} document />
         </div>
       )}
       {/* diff 合并视图 — 统一使用弹出式 Dialog（与 DraftEditor 一致） */}
@@ -369,7 +349,7 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
 
                     assertProject()
                     if (result.success) {
-                      toast.success('✅ ' + t('editor.mergeComplete'))
+                      toast.success(t('editor.mergeComplete'))
                       renderLog('info', 'Save:Draft', t('editor.mergeComplete'))
                       if (result.refreshError) renderLog('error', 'Load:Draft', result.refreshError)
                       useEditorStore.getState().closeTab(activeTab.id)

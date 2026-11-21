@@ -1,0 +1,35 @@
+.nf-manuscript-tools-trigger[aria-expanded='true'] { color: var(--color-accent); }
+
+.nf-manuscript-search {
+  display: flex;
+  flex-direction: column;
+  width: min(38rem, calc(100vw - 1.5rem));
+  max-width: none;
+  max-height: 75dvh;
+  padding: 0;
+  background: var(--color-editor-bg);
+}
+.nf-manuscript-search form { display: flex; gap: 0.5rem; padding: 0.75rem 1.25rem 0.5rem; align-items: center; }
+.nf-manuscript-search form input { min-width: 0; }
+.nf-manuscript-search-status { padding: 0 1.25rem 0.75rem; color: var(--color-text-secondary); font-size: var(--text-xs); }
+.nf-manuscript-search ul { display: grid; gap: 0.25rem; min-height: 0; overflow: auto; padding: 0 0.75rem 0.75rem; }
+.nf-manuscript-search li > button {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  width: 100%;
+  padding: 0.625rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  background: var(--color-panel);
+  font-size: var(--text-xs);
+  text-align: start;
+  cursor: pointer;
+}
+.nf-manuscript-search li > button > svg { flex: none; color: var(--color-accent); }
+.nf-manuscript-search li > button:hover { background: var(--color-active); }
+.nf-manuscript-search strong, .nf-manuscript-search small { margin-inline-end: 0.625rem; }
+.nf-manuscript-search small, .nf-manuscript-search-snippet { color: var(--color-text-secondary); }
+.nf-manuscript-search-snippet { display: block; overflow-wrap: anywhere; margin-block-start: 0.2rem; }
+.nf-manuscript-search mark { background: var(--color-active); color: var(--color-text); border-radius: var(--radius-sm); }

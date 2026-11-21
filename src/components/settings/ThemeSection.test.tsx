@@ -21,7 +21,7 @@ beforeAll(() => {
 })
 
 /** 卡片顺序 = `lib/theme-meta.ts` 的 THEME_ORDER（与右侧图标栏菜单同一份；此处硬编码以钉住契约） */
-const CARD_IDS: Theme[] = ['galaxy', 'dark', 'light', 'paper']
+const CARD_IDS: Theme[] = ['galaxy', 'dark', 'light', 'paper', 'custom']
 
 const render = (): { container: HTMLElement; root: Root } => {
   const container = document.createElement('div')
@@ -84,10 +84,12 @@ describe('ThemeSection', () => {
     expect(text).toContain(t('theme.dark'))
     expect(text).toContain(t('theme.light'))
 
-    // 每张卡都有三色预览条（aria-hidden 的条：3 段），且 title 只说「当前主题的配色预览」
+    // 每个预览条独立应用对应主题的令牌。
     for (const c of cards) {
       expect(c.querySelectorAll('span[aria-hidden] > span')).toHaveLength(3)
-      expect(c.querySelector('span[aria-hidden][title]')?.getAttribute('title')).toBe(t('theme.palettePreview'))
+      const preview = c.querySelector('span[aria-hidden][title]')
+      expect(preview?.getAttribute('title')).toBe(t('theme.palettePreview'))
+      expect(preview?.classList.contains(c.getAttribute('data-theme-card')!)).toBe(true)
     }
     act(() => { root.unmount() })
   })

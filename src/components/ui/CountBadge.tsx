@@ -18,7 +18,7 @@ interface CountBadgeProps {
   /** 单位：章 / 卷 / 事件… */
   unit?: string
   tone?: CountTone
-  /** 显示 2px 迷你进度条（需要 total） */
+  /** 有有效目标时，在计数下方显示迷你进度条。 */
   progress?: boolean
   className?: string
   title?: string
@@ -28,8 +28,7 @@ interface CountBadgeProps {
  * 侧栏/页头的紧凑计数徽标。
  *
  * 设计意图：把「裸数字」升级成有形状、有语义色、可带进度的统计单元，
- * 同时保持 11px 字号与 32px 行高内可容纳。数字用 tabular-nums 对齐，
- * 进度条只在有 total 时出现，避免每个计数都变成重型图表。
+ * 进度型徽标将实际计数和进度轨道分开着色，局部状态不会降低分母的可读性。
  */
 export default function CountBadge({
   value,
@@ -47,34 +46,34 @@ export default function CountBadge({
     ? Math.min(100, Math.max(0, (numericValue / total) * 100))
     : 0
   const showProgress = progress && total !== undefined && total > 0 && isNumeric
+  const progressColor = tone === 'warning' ? 'var(--color-gold)' : color
 
   return (
     <span
       className={cn(
-        'inline-flex flex-shrink-0 flex-col items-end gap-0.5 px-1.5 py-px text-micro font-medium leading-none tabular-nums',
-        showProgress ? 'rounded-md' : 'rounded-full',
+        'inline-flex flex-shrink-0 flex-col items-end gap-0.5 rounded-sm border border-[var(--color-border)] bg-[var(--color-editor-bg)] px-1.5 py-[3px] text-micro font-medium leading-none tabular-nums',
+        showProgress && 'min-w-11',
         className,
       )}
       style={{
-        color,
-        backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
+        color: showProgress || tone === 'muted' ? 'var(--color-text)' : color,
       }}
       title={title}
     >
       <span className="inline-flex items-baseline gap-0.5 whitespace-nowrap">
-        <span>{value}</span>
-        {total !== undefined && <span style={{ opacity: 0.55 }}>/{total}</span>}
-        {unit && <span className="font-normal" style={{ opacity: 0.72 }}>{unit}</span>}
+        <span className="font-semibold">{value}</span>
+        {total !== undefined && <span className="text-[var(--color-text-secondary)]">/{total}</span>}
+        {unit && <span className="font-normal text-[var(--color-text-secondary)]">{unit}</span>}
       </span>
       {showProgress && (
         <span
           data-count-progress
-          className="h-[2px] w-6 overflow-hidden rounded-full"
-          style={{ backgroundColor: `color-mix(in srgb, ${color} 22%, transparent)` }}
+          aria-hidden="true"
+          className="h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-border)]"
         >
           <span
             className="block h-full rounded-full"
-            style={{ width: `${pct}%`, backgroundColor: color }}
+            style={{ width: `${pct}%`, backgroundColor: progressColor }}
           />
         </span>
       )}

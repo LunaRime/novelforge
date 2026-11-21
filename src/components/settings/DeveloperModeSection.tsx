@@ -1,3 +1,4 @@
+import { SemanticLabel } from '../ui/SemanticLabel'
 /**
  * DeveloperModeSection — 开发者模式设置
  *
@@ -269,9 +270,7 @@ export default function DeveloperModeSection() {
                 }`}
                 style={{ backgroundColor: browserTestResult.success ? 'color-mix(in srgb, var(--color-success) 8%, transparent)' : 'color-mix(in srgb, var(--color-error) 8%, transparent)' }}
               >
-                {browserTestResult.success
-                  ? `✅ ${t('dev.browserTestSuccess').replace('{version}', browserTestResult.version ?? '')}`
-                  : `❌ ${t('dev.browserTestFailed').replace('{error}', browserTestResult.error ?? '')}`}
+                <SemanticLabel name={browserTestResult.success ? 'success' : 'error'}>{browserTestResult.success ? t('dev.browserTestSuccess').replace('{version}', browserTestResult.version ?? '') : t('dev.browserTestFailed').replace('{error}', browserTestResult.error ?? '')}</SemanticLabel>
               </div>
             )}
           </>
@@ -337,7 +336,7 @@ export default function DeveloperModeSection() {
           }`}
           style={{ backgroundColor: testResult.success ? 'color-mix(in srgb, var(--color-success) 8%, transparent)' : 'color-mix(in srgb, var(--color-error) 8%, transparent)' }}
         >
-          {testResult.success ? `✅ ${t('dev.testSuccess')}` : `❌ ${t('dev.testFailed').replace('{error}', testResult.error ?? '')}`}
+          <SemanticLabel name={testResult.success ? 'success' : 'error'}>{testResult.success ? t('dev.testSuccess') : t('dev.testFailed').replace('{error}', testResult.error ?? '')}</SemanticLabel>
         </div>
       )}
     </div>

@@ -1,6 +1,8 @@
 # NovelForge 架构文档
 
-> 当前实施边界（2026-11-13）：独立存储核心、M2–M4、编辑器应用层、修稿原子合并与知识库侧栏均已交付。本分支已完成知识库总览 A、架构文档 B1、小说配置 B2 与架构状态总览 B3（19–22），以及 C1a–C1g（23–24、26–30）、C2（31）和 [C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md)。C3 本地验收为 350 个测试文件、3,849 条测试。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已提交为 `9f1c1ff`。[E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已提交为 `4f3508d`。[F1 切换设计与身份映射](40-file-storage-cutover-design.md) 离线映射与候选 IPC 已提交为 `d00c870`、`80dd06e`。F2 候选编辑器已通过 Windows 生产构建验证正文保存、新章首次发布和正文导入后的重启恢复。常规 SQLite 项目继续使用现有数据库，离线迁移输出使用独立空目录。
+> 当前实施边界（2026-11-21）。独立核心、编辑器应用层、修稿原子合并、知识库，以及 C/D 应用与运行时重构均已接入。普通项目通过桌面工作台使用 SQLite，激活的文件项目从独立编辑器写入当前 Markdown 稿件，并可重建全文索引。文件项目的历史版本、已有分支正文和隔离恢复以 F3 验收记录为准。[后端实施](18-followup-implementation-plan.md) · [F3 存储验收](52-f3-file-storage-acceptance.md)
+>
+> V3 桌面工作台已接入正文稿纸、项目导航、功能页、写作搭档、任务、设置与启动欢迎页。桌面使用各面板独立开关及 F11 专注模式，网页评审原型保留构建态和写作态。Windows 的集成、性能、输入法和包验收证据绑定 U7 记录中的构建，发布包和 macOS 原生设备验证按各自的实际结果记账。[V3 实施](42-v3-frontend-delivery-plan.md) · [U7 Windows 集成验收](51-v3-u7-integration-acceptance.md)
 
 > 2026-10-28 起，这一组文档是改造的权威依据。旧的 `docs/architecture-review.md`、`docs/project-structure-review.md` 回答的是"目录整不整齐"，这里回答的是"事实放在哪、一次改动要跨几层"。
 
@@ -54,23 +56,21 @@
 | 42 | [V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md) | V3 视觉、后端交接、工程拆分和分批验收 | 本地交接范围已核定 |
 | 43 | [V3 U0 样板、基线与接口记录](43-v3-u0-baseline.md) | Storybook、Windows 交互矩阵、长文输入及现有接口 | 本地验证记录 |
 | 44 | [V3 U1 工作台施工与交互验收](44-v3-u1-workbench-plan.md) | 两态画面、模式切换、窄窗、键盘和正式接线清单 | Windows 打包验收通过 |
-| 45 | [V3 启动画面设计与接入](45-v3-startup-design.md) | 启动样板、Logo 评审、状态及正式接入 | 设计样板 |
-| 46 | [V3 U2 正文编辑与版本操作施工计划](46-v3-u2-editor-plan.md) | 标签、稿纸、窄栏修稿与保存回执 | 施工计划 |
-| 47 | [V3 U3 项目导航与章节定位施工计划](47-v3-u3-project-navigation-plan.md) | 卷展开、活动文档、真实顺序与重排回归 | 施工计划 |
-| 48 | [V3 U4 功能页施工与验收计划](48-v3-u4-feature-pages-plan.md) | 蓝图写入确认与其余功能页回归 | 施工计划 |
-| 49 | [V3 U5 写作搭档、提案与任务施工计划](49-v3-u5-partner-tasks-plan.md) | 任务召回、审批、修稿与取消回执 | 施工计划 |
-| 50 | [V3 U6 设置、欢迎页与公共交互施工计划](50-v3-u6-settings-and-welcome-plan.md) | 首帧、设置预览和关闭、欢迎页入口 | 施工计划 |
+| 45 | [V3 启动画面设计与接入](45-v3-startup-design.md) | 启动样板、Logo 评审、状态及正式接入 | 首帧与失败恢复已接入 |
+| 46 | [V3 U2 正文编辑与版本操作施工计划](46-v3-u2-editor-plan.md) | 标签、稿纸、窄栏修稿与保存回执 | 已接入，见 U7 Windows 记录 |
+| 47 | [V3 U3 项目导航与章节定位施工计划](47-v3-u3-project-navigation-plan.md) | 卷展开、活动文档、真实顺序与重排回归 | 已接入，见 U7 Windows 记录 |
+| 48 | [V3 U4 功能页施工与验收计划](48-v3-u4-feature-pages-plan.md) | 蓝图写入确认与其余功能页回归 | 已接入，见 U7 Windows 记录 |
+| 49 | [V3 U5 写作搭档、提案与任务施工计划](49-v3-u5-partner-tasks-plan.md) | 任务召回、审批、修稿与取消回执 | 已接入，见 U7 Windows 记录 |
+| 50 | [V3 U6 设置、欢迎页与公共交互施工计划](50-v3-u6-settings-and-welcome-plan.md) | 首帧、设置预览和关闭、欢迎页入口 | 已接入，见 U7 Windows 记录 |
 | 51 | [V3 U7 集成、性能与真机验收](51-v3-u7-integration-acceptance.md) | 大项目样本、性能采集与正式打包矩阵 | Windows 集成验收与交付记录 |
 | 52 | [F3 文件项目 Windows 验收与回退](52-f3-file-storage-acceptance.md) | 分支身份、打包应用重启与隔离归档恢复 | Windows 验收通过 |
 | 53 | [V3 后端交接与 U1 工作台基线](53-v3-backend-handoff.md) | C/D 交付、生产操作契约及普通 SQLite 打包基线 | 本地证据已核定 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 
-三句话概括整套方案：
-
-1. **真相**：`chapters/*.md`，`id` 在 frontmatter；`SQLite` 只是可删可建的索引。
-2. **路径**：章节正文只有一个写入口 `writeChapter`，agent 与 UI 都走它。
-3. **核心**：`src/core/` 不依赖 Electron / React / stores，能 `tsc` 独立编译——将来可抽包。
+1. 普通项目的草稿、版本和分支由 SQLite 持久化。激活文件项目的当前章节写入 `chapters/*.md`，文件头记录章节 ID，全文索引属于可重建的数据。文件项目的保留库继续承载历史关系及部分业务数据。
+2. 文件项目的章节写入由应用用例通过 `FileChapterStore` 提交。不同项目入口依据各自的文档身份、会话和写入回执处理保存与恢复。[存储生命周期](37-storage-lifecycle-matrix.md) · [写入与恢复](41-file-commit-recovery.md)
+3. `src/core/` 可独立编译。Electron、界面及原生依赖通过应用用例的端口接入。
 
 ---
 
@@ -86,9 +86,9 @@ node scripts/doctor.mjs ./new-export
 node scripts/verify-storage-export.mjs ./offline-vela.db ./new-export
 ```
 
-实际命令参数与限制见 [10 核心使用](10-core-usage.md)。应用入口仍使用 SQLite。
+普通项目按原入口打开。离线迁移输出需要显式准备和激活，随后从独立文件编辑器打开。见 [核心命令与限制](10-core-usage.md) 及 [文件项目验收](52-f3-file-storage-acceptance.md)。
 
-## 后续切换的验收目标（尚未启用）
+## 文件项目维护与架构门禁
 
 ```bash
 # 1) 删索引不丢章

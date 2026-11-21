@@ -1,44 +1,91 @@
 /* ===== NovelForge 统一编辑器样式 ===== */
 
-/* 稿纸宽度沿用作者偏好。容器收窄仅约束当前排版，不回写已保存的栏宽。 */
+/* 章头与正文共用稿纸宽度、侧边距和滚动条空间。 */
 .nf-prose-editor {
-  container-type: inline-size;
-  --prose-gutter: clamp(8px, 3cqi, 32px);
-  --prose-inset: clamp(16px, 5cqi, 40px);
+  container: manuscript / size;
+  --prose-gutter: clamp(8px, 3.2cqi, 40px);
+  --prose-inset: clamp(18px, 6cqi, 56px);
+  --prose-body-start: clamp(16px, 3cqi, 28px);
+  --prose-edge: inset 1px 0 var(--color-border), inset -1px 0 var(--color-border);
   background: var(--color-panel);
 }
 
 .nf-prose-heading-gutter {
   flex-shrink: 0;
+  max-height: 40%;
   padding: var(--prose-gutter) var(--prose-gutter) 0;
-  /* 与正文滚动区预留相同滚动条宽度，让窄栏标题和正文保持对齐。 */
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
 
 .nf-prose-heading {
+  position: relative;
   max-width: var(--prose-measure);
   margin-inline: auto;
-  padding: 24px var(--prose-inset) 0;
+  padding: clamp(20px, 5cqi, 52px) var(--prose-inset) 0;
+  border-start-start-radius: var(--radius-md);
   background: var(--color-editor-bg);
+  box-shadow: var(--prose-edge), inset 0 1px var(--color-border);
   color: var(--color-text);
 }
+
+.nf-prose-heading::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  border: 7px solid transparent;
+  border-block-start-color: var(--color-workbench-fold);
+  border-inline-end-color: var(--color-workbench-fold);
+  pointer-events: none;
+}
+
+.nf-prose-heading::after {
+  content: '';
+  display: block;
+  width: 3rem;
+  margin-block-start: clamp(12px, 3cqi, 24px);
+  border-block-end: 1px solid var(--color-gold);
+}
+
+.nf-prose-editor .cm-content { box-shadow: var(--prose-edge); }
 
 .nf-prose-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  align-items: center;
+  gap: 0.5rem;
   color: var(--color-text-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-micro);
+  font-weight: 600;
+}
+
+.nf-prose-version {
+  padding-inline: 0.375rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .nf-prose-heading h1 {
-  margin: 8px 0 0;
+  margin: 0;
   font-family: var(--font-writing);
-  font-size: var(--text-2xl);
+  font-size: clamp(var(--text-xl), 4.6cqi, var(--text-3xl));
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.25;
   overflow-wrap: anywhere;
+}
+
+.nf-prose-meta + h1 { margin-block-start: 0.5rem; }
+
+/* 矮窗口优先完整显示章名，同时给正文滚动区留出空间。 */
+@container manuscript (max-height: 18rem) {
+  .nf-prose-heading-gutter { max-height: 55%; padding-block-start: 6px; }
+  .nf-prose-heading { padding-block-start: 8px; }
+  .nf-prose-heading h1 { font-size: var(--text-xl); }
+  .nf-prose-meta + h1 { margin-block-start: 0.25rem; }
+  .nf-prose-heading::after { margin-block-start: 6px; }
+  .nf-prose-editor .cm-content { --prose-body-start: 10px; }
 }
 
 /* ── 消除浏览器默认焦点样式（黄色边框来源）─────────────────────────────── */
@@ -101,126 +148,7 @@
   outline: none !important;
   box-shadow: none !important;
 }
-
-/* ═══════════════════════════════════════════════════════════════════════════
-   区域卡片化：四个区域 = 四张独立 UI 卡片
-   ═══════════════════════════════════════════════════════════════════════════ */
-/* 卡片浮在「画布」上（画布 = App.tsx 里包住 PanelGroup 的那层，底色 `--color-canvas`——比四个区域
-   的面色都更深一档；取 `--color-bg` 时正好等于编辑区，间隙会整条隐形）：
-   - **卡片**：圆角 6px + `--color-border` 细边框 + `--color-card-shadow` 极轻投影；
-   - **卡片之间的 6px 间隙**：就是分隔条本身——透明，露出画布底色，不画任何线。
-   ⚠️ 三条硬约束（都是真机反馈换来的，勿回退）：
-   - **分隔条必须保持透明**：它现在扮演的是「卡片间距」，任何底色/边框都会让它变回「一条线」。
-   - **卡片层必须 `overflow: hidden`**：侧栏/AI/底栏的面板组件自身已 overflow-hidden（再裁一层零副作用），
-     编辑区则靠它把内部直角（tab 栏等底色）裁成圆角——不加则圆角处露出直角，等于没圆角。
-   - **除卡片自己的 1px 边框外不要再加线**：与 TitleBar.borderBottom / StatusBar.borderTop 会叠成 2px 双线。
-   迭代史：1px 线 → 6px 田埂带 → 田埂带 + 两侧细边 → 现在（卡片 + 透明间隙）。 */
-[data-region] {
-  border-radius: 6px;
-  border: 1px solid var(--color-border);
-  box-shadow: var(--color-card-shadow);
-  overflow: hidden;
-}
-
-/* ── 卡片的边与角 ──
-   现在每张卡片**四周都有缝**：内部缝 6px，外围（贴标题栏 / 状态栏 / 窗口左右）是它的一半 3px，
-   且同色相连（见 App.tsx 内容区的 `padding: 3`）。所以卡片一律「四边细边框 + 四角圆角」——
-   基础 [data-region] 规则已经够用（2026-09-22 收敛：此前的「外部边」直角/无边框、底栏开关的
-   动态类、侧栏开关的 :has() 判定全部不再需要，卡片状态与面板开关彻底解耦）。
-   唯一的例外是两侧图标栏：它和自己的相邻面板绑定成**一张卡片**（中间不留缝），
-   所以贴合的那条边无边框、直角——圆角由图标栏那一侧提供（见 LeftToolWindowBar / RightToolWindowBar）。 */
-[data-region="sidebar"] {
-  border-left: 0; /* 与左图标栏绑定，无缝 */
-  border-radius: 0 6px 6px 0;
-}
-[data-region="ai"] {
-  border-right: 0; /* 与右图标栏绑定，无缝 */
-  border-radius: 6px 0 0 6px;
-  /* ⚠️ 放开裁剪：AGENT 面板底部那排浮层（+/深度/模型/@提及）向上弹出，面板一矮就会被
-     `overflow: hidden` 裁掉上半截（2026-09-22）。裁剪职责交回面板自己——AIPanel 根节点
-     也是 overflow: visible，滚动由它内层的对话区容器自管。 */
-  overflow: visible;
-}
-
-/* 编辑区是主工作区：单独加深边框 + 加重投影，把「独立卡片」的效果顶出来
-   （2026-09-22 用户指定；其它卡片仍用通用的 --color-border / --color-card-shadow） */
-[data-region="editor"] {
-  border-color: var(--color-card-edge);
-  box-shadow: var(--color-card-shadow-strong);
-}
-
-/* 分隔条 = 卡片间隙：6px，透明（露出画布底色）。
-   命中区无需额外处理：库自己按指针类型扩展（resizeTargetMinimumSize.coarse/fine）。 */
-[data-separator] {
-  flex-shrink: 0;
-  position: relative;
-  background: transparent;
-}
-
-/* hover / 拖拽提示 = 居中「药丸」，**不整条变色**——整条 6px 亮起又变回「一根线」 */
-[data-separator]::after {
-  content: '';
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  border-radius: 9999px;
-  background: transparent;
-  transition: background 0.15s ease;
-  pointer-events: none;
-}
-
-/* 竖缝（左右分割）：6px 宽，药丸竖直居中（2px 宽 × 40% 高，每边 2px）。
-   ⚠️ 药丸宽度与缝宽必须**同奇偶**才能整数居中：奇数缝配奇数丸（7px→3px）、
-   偶数缝配偶数丸（6px/8px/10px→2px 或 4px）；错开会落在半像素上、边缘发虚。
-   药丸也不宜超过缝宽的一半：6px 缝配 4px 丸只剩 1px 余量，hover 时又像「整条变色」。
-   ⚠️ 方向判定用 `aria-orientation="vertical"`，**不要**改用父元素 style 里的
-   `flex-direction: row` 匹配 —— 库现在渲染的是 `flex-flow: row`（2026-09-22 实测），
-   旧选择器永远匹配不到，分隔条宽度因此一直是 0：区域"紧紧挨在一起"的真正原因（此前几轮
-   查样式值查不出来的那种"改了没反应"，先量一眼 getComputedStyle 的 width 即可定性）。 */
-[data-separator][aria-orientation="vertical"] {
-  width: 6px;
-  cursor: col-resize;
-}
-
-[data-separator][aria-orientation="vertical"]::after {
-  width: 2px;
-  height: 40%;
-}
-
-[data-separator][aria-orientation="vertical"]:hover::after,
-[data-separator][aria-orientation="vertical"][data-separator="dragging"]::after {
-  /* 只变色、**不变宽**：改变宽度会让布局在悬停/拖拽瞬间抖动 */
-  background: var(--color-sash-hover);
-}
-
-/* 横缝（上下分割）：6px 高，药丸水平居中（40% 宽 × 2px 高），方向判定同竖缝 */
-[data-separator][aria-orientation="horizontal"] {
-  height: 6px;
-  cursor: row-resize;
-}
-
-[data-separator][aria-orientation="horizontal"]::after {
-  width: 40%;
-  height: 2px;
-}
-
-[data-separator][aria-orientation="horizontal"]:hover::after,
-[data-separator][aria-orientation="horizontal"][data-separator="dragging"]::after {
-  background: var(--color-sash-hover);
-}
-
-/* 键盘聚焦（TAB 到分隔条）：与 hover 同样是**居中那条药丸**，不整条变色。
-   ⚠️ 必须显式关掉浏览器默认焦点环：默认环画在元素**外沿**，而分隔条是 6px 宽的透明缝，
-   于是"外环"就成了缝左右两条竖线 —— 看起来像「两条蓝线」，而用户预期的是缝中间那一条。
-   （与 index.css @layer base 的全局 :focus-visible 不冲突：本文件是顶层 CSS，优先级更高。）
-   配色用 --color-focus-ring 而非 --color-sash-hover：焦点态要比悬停态更醒目，
-   两者可区分（sash-hover 透明度仅 0.12–0.15，用于鼠标悬停足够，做键盘指示偏弱）。 */
-[data-separator]:focus-visible {
-  outline: none;
-}
-
-[data-separator][aria-orientation="vertical"]:focus-visible::after,
-[data-separator][aria-orientation="horizontal"]:focus-visible::after {
-  background: var(--color-focus-ring);
+.nf-prose-editor .cm-manuscript-underline {
+  text-decoration-line: underline;
+  text-underline-offset: 0.15em;
 }

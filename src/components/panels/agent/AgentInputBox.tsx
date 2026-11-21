@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import {
   Plus,
   ChevronDown,
@@ -20,24 +20,26 @@ import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { Badge } from '../../ui/Badge'
 import { MenuItem } from '../../ui/MenuItem'
+import MarkdownFormatMenu from '../../ui/MarkdownFormatMenu'
+import { formatTextarea } from '../../ui/markdown-format'
+import MarkdownContent from '../../ui/MarkdownContent'
+import { Button } from '../../ui/Button'
 import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
 import FilePickerMenu from './FilePickerMenu'
 import { PopoverSurface } from '../../ui/PopoverSurface'
 import ThinkingLevelSlider, { ThinkingLevelIcon } from '../../ui/ThinkingLevelSlider'
 import { useAgentComposerDraft, useAgentPanelScope } from './agent-panel-session'
+import '../runtime-panels.css'
+import './agent-popovers.css'
 import {
   getAllSlashCommands,
   type SlashCommand,
   type MentionTarget,
 } from '../../../services/agent/intent-router'
 
-/** 输入框最大高度（px），超出后框内滚动 */
-const MAX_HEIGHT = 200
-
 /**
- * Agent 输入框组件（参考 agent1.html 第 69-155 行）
- * 卡片式圆角容器，底部工具栏含模式/模型/发送
+ * 写作搭档输入区。输入草稿按当前项目会话和对话隔离。
  */
 export default function AgentInputBox() {
   const scope = useAgentPanelScope()
@@ -47,6 +49,7 @@ export default function AgentInputBox() {
 
 function AgentComposer() {
   const [inputText, setInputText] = useAgentComposerDraft()
+  const [previewFormat, setPreviewFormat] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { t } = useTranslation()
   // 原子 selector：action/原始值引用稳定，流式期间不随整 store 每 50ms 重渲染
@@ -123,8 +126,9 @@ function AgentComposer() {
   // 选择 / 命令
   const handleSlashSelect = useCallback((cmd: SlashCommand) => {
     setShowSlashMenu(false)
-    if (cmd.source === 'skill') {
-      // Skill 命令：替换为 /skill-name 后面可以加参数
+    setPreviewFormat(false)
+    if (cmd.source === 'skill' || cmd.takesArgs) {
+      // 带参数的命令先写入输入框，作者可以补充目标。
       setInputText(`/${cmd.name} `)
     } else {
       // 内置命令：直接发送
@@ -149,47 +153,17 @@ function AgentComposer() {
 
   const contextRef = useRef<HTMLDivElement>(null)
   const modelThinkingRef = useRef<HTMLDivElement>(null)
+  // 用工具栏剩余宽度作为锚点。切档时按钮文字宽度变化，锚点边缘仍保持原位。
+  const modelThinkingPopover = useFloatingPosition<HTMLDivElement>(modelThinkingRef, showModelThinkingMenu, {
+    placement: 'above',
+    align: 'end',
+  })
   const filePickerRef = useRef<HTMLDivElement>(null)
   /** 输入区容器 = 三个辅助菜单（@提及 / 斜杠命令 / 文件选择）的定位锚点 */
   const inputAreaRef = useRef<HTMLDivElement>(null)
 
   // 上下文菜单浮在整个窗口之上（锚点：+ 按钮容器；须在 contextRef 之后声明）
   const contextMenuRef = useFloatingPosition<HTMLDivElement>(contextRef, showContextMenu, { placement: 'above', align: 'start' })
-
-  // 调整文本框高度的通用函数
-  const adjustHeight = useCallback(() => {
-    const ta = textareaRef.current
-    if (!ta) return
-    // 先重置为 0px，让 scrollHeight 正确反映内容高度，避免 flex 布局拉伸导致计算出很大的初始高度
-    ta.style.height = '0px'
-    const next = Math.min(Math.max(ta.scrollHeight, 36), MAX_HEIGHT)
-    ta.style.height = next + 'px'
-    // 超出最大高度时框内滚动，否则隐藏滚动条
-    ta.style.overflowY = ta.scrollHeight > MAX_HEIGHT ? 'auto' : 'hidden'
-  }, [])
-
-  // 监听尺寸变化以重新计算高度，避免刚挂载时宽度未稳定导致的 placeholder 异常换行撑起高度
-  useEffect(() => {
-    const ta = textareaRef.current
-    if (!ta) {
-      adjustHeight()
-      return
-    }
-    const ro = new ResizeObserver(() => {
-      adjustHeight()
-    })
-    ro.observe(ta)
-    
-    // 初始化调用一次即可
-    adjustHeight()
-
-    return () => ro.disconnect()
-  }, [adjustHeight])
-
-  // 内容变化时重新调整高度
-  useEffect(() => {
-    adjustHeight()
-  }, [inputText, adjustHeight])
 
   // 点击外部关闭下拉（用 useOutsideClick 统一管理三个 ref）
   // 关闭 + 菜单时同时收起工作流命令展开态——下次打开从折叠状态开始
@@ -222,12 +196,14 @@ function AgentComposer() {
     }
     if (!inputText.trim()) return
     const text = inputText
+    setPreviewFormat(false)
     setInputText('')
     await sendMessage(text)
   }, [generating, inputText, sendMessage, cancelGeneration, setInputText])
 
   /** 键盘事件：Enter 发送，Shift+Enter 换行 */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return
     // / 或 @ 菜单打开时，由菜单组件处理键盘事件
     if (showSlashMenu || showMentionMenu) {
       if (['ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) {
@@ -249,36 +225,24 @@ function AgentComposer() {
 
   return (
     <div
-      // focus-within：textarea 自身写了 outline-none（去掉默认环以避免与外框叠成双层），
-      // 但此前**没有任何替代焦点样式** → 键盘用户看不到焦点落在 AI 主输入框（全应用最主要的输入入口）。
-      // 焦点落到内部任意元素时，把容器边框点亮。
-      className="relative flex flex-col gap-0 p-1.5 transition-colors focus-within:border-[var(--color-accent)]"
-      style={{
-        backgroundColor: 'var(--color-hover)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',  /* 4px 方正风格 */
-      }}
+      // 输入框或菜单触发器获得焦点时，共用输入容器的边框反馈。
+      className="nf-agent-composer relative flex flex-col gap-0 p-2"
     >
       {/* 输入区域 — 同时是 @提及 / 斜杠命令 / 文件选择三个辅助菜单的定位锚点
           （三个菜单渲染在本容器内部，各自用 useFloatingPosition 算 fixed 坐标） */}
       <div className="relative w-full" ref={inputAreaRef}>
           <textarea
+            hidden={previewFormat && !!inputText.trim()}
             ref={textareaRef}
             value={inputText}
             onChange={e => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('agent.placeholder')}
+            aria-label={t('agent.placeholder')}
             rows={1}
-            className="w-full resize-none outline-none bg-transparent text-xs leading-relaxed px-2 py-2"
-            style={{
-              color: 'var(--color-text)',
-              minHeight: 36,
-              maxHeight: MAX_HEIGHT,
-              overflowY: 'hidden',
-              display: 'block',
-            }}
+            className="nf-agent-composer-field w-full resize-none bg-transparent px-2 py-2 text-xs leading-relaxed outline-none"
           />
-        {/* 占位文字颜色已通过 tailwind placeholder 设置 */}
+          {previewFormat && !!inputText.trim() && <div className="allow-select max-h-36 overflow-auto px-2 py-2 text-xs"><MarkdownContent content={inputText} document /></div>}
 
         {/* 三个辅助菜单：一律浮在整个窗口之上（useFloatingPosition 以输入区容器为锚点计算坐标） */}
         {showSlashMenu && (
@@ -314,6 +278,12 @@ function AgentComposer() {
         {/* 左侧工具按钮组 */}
         <div className="flex items-center gap-0.5 min-w-0 flex-1">
 
+          <MarkdownFormatMenu compact disabled={previewFormat && !!inputText.trim()} onFormat={format => {
+            if (textareaRef.current) formatTextarea(textareaRef.current, format)
+          }} />
+          {!!inputText.trim() && <Button type="button" variant="ghost" size="icon" className="shrink-0" aria-pressed={previewFormat}
+            aria-label={t(previewFormat ? 'action.edit' : 'editor.markdownPreview')} title={t(previewFormat ? 'action.edit' : 'editor.markdownPreview')}
+            onClick={() => setPreviewFormat(value => !value)}><FileText size={13} aria-hidden="true" /></Button>}
           {/* + 添加上下文（菜单必须包裹在 contextRef 内——否则点击菜单项时
               mousedown 被 useOutsideClick 判定为外部点击并卸载菜单，
               浏览器不再派发 click，菜单项 onClick 永不执行） */}
@@ -422,8 +392,10 @@ function AgentComposer() {
 
           {/* 模型 + 思考等级合并入口：模型按对话选择，思考等级全局共用。
               触发器 = 模型名（truncate）+ 当前档位徽章，不再用「·」拆分两段 meta。 */}
-          <div ref={modelThinkingRef} className="relative min-w-0">
+          <div ref={modelThinkingRef} className="relative min-w-0 flex-1">
             <button
+              type="button"
+              aria-expanded={showModelThinkingMenu}
               onClick={() => {
                 setShowContextMenu(false)
                 setShowFilePicker(false)
@@ -436,8 +408,7 @@ function AgentComposer() {
                 // 与旧模型触发器同一条约束：button 即使 display:flex 也是 shrink-to-fit，
                 // 固定宽度会顶出窄面板；min(...) 兜住上限，模型名再靠 truncate 收进剩余空间
                 maxWidth: 'min(220px, 100%)',
-                anchorName: '--menu-model-thinking',
-              } as React.CSSProperties}
+              }}
               onMouseEnter={e => {
                 e.currentTarget.style.backgroundColor = 'var(--color-hover)'
                 e.currentTarget.style.opacity = '1'
@@ -462,37 +433,35 @@ function AgentComposer() {
             {/* 合并弹窗：上半「本对话模型」（按会话），下半「全局思考等级」（全局共用） */}
             {showModelThinkingMenu && (
               <PopoverSurface
-                anchorName="--menu-model-thinking"
-                className="py-1"
+                ref={modelThinkingPopover}
+                className="nf-model-thinking-popover py-1"
                 style={{ width: 260, maxWidth: 'calc(100vw - 32px)' }}
               >
                 <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
                   {t('agent.modelSectionTitle')}
                 </div>
-                {chatModels.length === 0 ? (
-                  <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                    {t('agent.noModel')}
-                  </div>
-                ) : (
-                  chatModels.map(model => (
-                    <MenuItem
-                      key={model.id}
-                      label={model.name}
-                      selected={model.id === currentModelId}
-                      trailing={
-                        model.provider ? (
+                <div className="max-h-32 overflow-y-auto">
+                  {chatModels.length === 0 ? (
+                    <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                      {t('agent.noModel')}
+                    </div>
+                  ) : chatModels.map(model => (
+                      <MenuItem
+                        key={model.id}
+                        label={model.name}
+                        selected={model.id === currentModelId}
+                        trailing={model.provider && (
                           <Badge variant="muted" className="px-1.5 font-normal flex-shrink-0">
                             {model.provider}
                           </Badge>
-                        ) : undefined
-                      }
-                      onClick={() => {
-                        setModelId(model.id)
-                        setShowModelThinkingMenu(false)
-                      }}
-                    />
-                  ))
-                )}
+                        )}
+                        onClick={() => {
+                          setModelId(model.id)
+                          setShowModelThinkingMenu(false)
+                        }}
+                      />
+                  ))}
+                </div>
 
                 <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
 
@@ -513,21 +482,13 @@ function AgentComposer() {
         {/* 右侧：发送/停止 */}
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
+            type="button"
             onClick={handleSendOrStop}
             disabled={!generating && !canSend}
-            className="flex items-center justify-center w-6 h-6 transition-all duration-150"
-            style={{
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: generating
-                ? 'var(--color-text-secondary)'
-                : canSend
-                ? 'var(--color-accent)'
-                : 'rgba(128,128,128,0.3)',
-              color: 'var(--color-text)',
-              cursor: !generating && !canSend ? 'not-allowed' : 'pointer',
-              opacity: !generating && !canSend ? 0.5 : 1,
-            }}
+            className="nf-agent-send grid size-8 place-items-center rounded-lg"
+            data-generating={generating || undefined}
             title={generating ? t('agent.stopGen') : t('agent.sendMsg')}
+            aria-label={generating ? t('agent.stopGen') : t('agent.sendMsg')}
           >
             {generating ? (
               <Square size={10} fill="currentColor" />

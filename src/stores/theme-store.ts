@@ -1,8 +1,50 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { ipc } from '../services/ipc-client'
+import { tokens } from '../tokens'
 
-export type Theme = 'light' | 'galaxy' | 'paper' | 'dark'
+export type Theme = 'light' | 'galaxy' | 'paper' | 'dark' | 'custom'
+export type CustomThemeColors = { base: 'light' | 'dark'; accent: string; paper: string }
+export const CUSTOM_THEME_DEFAULTS: Record<CustomThemeColors['base'], CustomThemeColors> = {
+  light: { base: 'light', accent: tokens.light.color.accent, paper: tokens.light.color.editorBg },
+  dark: { base: 'dark', accent: tokens.dark.color.accent, paper: tokens.dark.color.editorBg },
+}
+
+const HEX_COLOR = /^#[\da-f]{6}$/i
+
+/** 用基底墨色修正对比度，同时保留用户选择的原始色值。 */
+export function customThemePalette(input: CustomThemeColors) {
+  const base = input.base === 'dark' ? 'dark' : 'light'
+  const defaults = CUSTOM_THEME_DEFAULTS[base]
+  const rawPaper = HEX_COLOR.test(input.paper) ? input.paper : defaults.paper
+  const rawAccent = HEX_COLOR.test(input.accent) ? input.accent : defaults.accent
+  const ink = tokens[base].color.text
+  const readChannels = (hex: string) => [1, 3, 5].map(offset => parseInt(hex.slice(offset, offset + 2), 16))
+  const luminance = (hex: string) => readChannels(hex).map(channel => channel / 255)
+    .map(value => value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4)
+    .reduce((total, value, i) => total + value * [0.2126, 0.7152, 0.0722][i], 0)
+  const contrast = (first: string, second: string) => {
+    const a = luminance(first) + 0.05
+    const b = luminance(second) + 0.05
+    return Math.max(a, b) / Math.min(a, b)
+  }
+  const mix = (first: string, second: string, ratio: number) => {
+    const channels = readChannels(second)
+    return '#' + readChannels(first).map((channel, i) => Math.round(channel + (channels[i] - channel) * ratio).toString(16).padStart(2, '0')).join('')
+  }
+  const fit = (raw: string, toward: string, accept: (candidate: string) => boolean) => {
+    for (let weight = 0; weight < 1; weight += 0.025) {
+      const candidate = mix(raw, toward, weight)
+      if (accept(candidate)) return candidate
+    }
+    return toward
+  }
+  const paper = fit(rawPaper, defaults.paper, value => contrast(ink, value) >= 7)
+  const canvas = mix(paper, ink, 0.045)
+  const panel = mix(paper, ink, 0.075)
+  const accent = fit(rawAccent, ink, value => contrast(value, panel) >= 4.5 && contrast(value, paper) >= 4.5)
+  return { paper, canvas, panel, ink, accent, accentRgb: readChannels(accent).join(', '), primaryInk: paper }
+}
 
 // ─── 共享字体库 ─────────────────────────────────────────────────────────────
 
@@ -116,7 +158,9 @@ interface ThemeState {
   /** 用户选择的主题 */
   theme: Theme
   /** 实际应用的主题（解析 system 后） */
-  resolvedTheme: 'light' | 'galaxy' | 'paper' | 'dark'
+  resolvedTheme: Theme
+  customColors: CustomThemeColors
+  setCustomColors: (colors: CustomThemeColors) => void
   /** 当前缩放级别（1.0 = 100%） */
   zoom: number
   /** 当前写作字体（正文编辑区 → --font-writing） */
@@ -148,6 +192,11 @@ export const useThemeStore = create<ThemeState>()(
     (set, get) => ({
       theme: 'light',
       resolvedTheme: 'light',
+      customColors: CUSTOM_THEME_DEFAULTS.light,
+      setCustomColors: colors => {
+        set({ customColors: colors })
+        if (get().resolvedTheme === 'custom') applyTheme('custom', colors)
+      },
       zoom: 1.0,
       writingFont: 'lxgw-wenkai',
       uiFont: 'inter',
@@ -155,7 +204,7 @@ export const useThemeStore = create<ThemeState>()(
       setTheme: (theme: Theme) => {
         const resolved = resolveTheme(theme)
         set({ theme, resolvedTheme: resolved })
-        applyTheme(resolved)
+        applyTheme(resolved, get().customColors)
       },
 
       initTheme: () => {
@@ -185,7 +234,7 @@ export const useThemeStore = create<ThemeState>()(
 
         const resolved = resolveTheme(theme)
         set({ resolvedTheme: resolved })
-        applyTheme(resolved)
+        applyTheme(resolved, get().customColors)
         applyZoom(zoom)
         applyWritingFont(writingFont)
         applyUiFont(uiFont)
@@ -228,6 +277,7 @@ export const useThemeStore = create<ThemeState>()(
       name: 'vela-theme',
       partialize: (state) => ({
         theme: state.theme,
+        customColors: state.customColors,
         zoom: state.zoom,
         writingFont: state.writingFont,
         uiFont: state.uiFont,
@@ -239,7 +289,7 @@ export const useThemeStore = create<ThemeState>()(
 // ─── 内部工具函数 ─────────────────────────────────────────────────────────
 
 /** 解析主题：直接返回实际值，保留对 localStorage 旧版 system 设定的向下兼容 */
-function resolveTheme(theme: Theme): 'light' | 'galaxy' | 'paper' | 'dark' {
+function resolveTheme(theme: Theme): Theme {
   if ((theme as string) === 'system') {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
@@ -247,9 +297,18 @@ function resolveTheme(theme: Theme): 'light' | 'galaxy' | 'paper' | 'dark' {
 }
 
 /** 应用主题到 DOM — 支持互斥的主题 */
-function applyTheme(theme: 'light' | 'galaxy' | 'paper' | 'dark') {
+function applyTheme(theme: Theme, custom: CustomThemeColors) {
   const root = document.documentElement
-  root.classList.remove('galaxy', 'paper', 'dark')
+  root.classList.remove('galaxy', 'paper', 'dark', 'nf-custom-theme')
+  const tokens = ['paper', 'canvas', 'panel', 'ink', 'accent', 'accent-rgb', 'primary-ink']
+  for (const token of tokens) root.style.removeProperty('--nf-custom-' + token)
+  if (theme === 'custom') {
+    const { paper, canvas, panel, ink, accent, accentRgb, primaryInk } = customThemePalette(custom)
+    const values = [paper, canvas, panel, ink, accent, accentRgb, primaryInk]
+    tokens.forEach((token, index) => root.style.setProperty('--nf-custom-' + token, values[index]))
+    root.classList.toggle('dark', custom.base === 'dark')
+    root.classList.add('nf-custom-theme')
+  }
   if (theme === 'galaxy') {
     root.classList.add('galaxy')
   } else if (theme === 'paper') {

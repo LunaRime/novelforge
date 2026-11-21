@@ -1,5 +1,6 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { GitFork, Trash2, Pin, Pencil, Archive, Plus, ChevronRight, MoreHorizontal } from 'lucide-react'
+import { CreateIcon } from '../../ui/ActionIcons'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { GitFork, Trash2, Pin, Pencil, Archive, ChevronRight, MoreHorizontal, History, Folder, X } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -25,11 +26,10 @@ import { formatRelativeTime } from '../../../utils/time'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { confirm } from '../../ui/Confirm'
 import { Button } from '../../ui/Button'
-import { MenuItem } from '../../ui/MenuItem'
-import { PopoverSurface } from '../../ui/PopoverSurface'
-import { useOutsideClick } from '../../../hooks/useOutsideClick'
-import { useEscapeKey } from '../../../hooks/useEscapeKey'
-import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
+import { ContextMenu, type ContextMenuEntry } from '../../ui/ContextMenu'
+import CountBadge from '../../ui/CountBadge'
+import { SemanticIcon } from '../../ui/SemanticLabel'
+import './agent-history.css'
 import { readAgentPosition, rememberAgentPosition, useAgentComposerDraft, useAgentPanelScope } from './agent-panel-session'
 
 /**
@@ -97,20 +97,13 @@ function EmptyState() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* 内容区（滚动）——输入框已移至面板下部固定，此处仅保留引导内容。
-          2026-09-22 UI 重做：改成 flex-col + 顶部对齐（原 paddingTop max(8vh,32px) 把内容
-          往下推、下方留一大片空白）+ 披露声明 mt-auto 压到底部，避免它夹在内容中间。 */}
+      {/* 空会话的提示与最近对话可以滚动，输入区固定在面板底部。 */}
       <div className="flex-1 overflow-y-auto flex flex-col">
       <div
         className="px-4 flex-1 flex flex-col"
         style={{ paddingTop: 16, paddingBottom: 16 }}
       >
-        {/* 标题（紧凑：text-sm，与 IDE 工具面板风格一致） */}
-        <div className="mb-1 pl-1 text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-          NovelForge
-        </div>
-        {/* 副标题 */}
-        <div className="mb-3 pl-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="mb-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-3 text-xs leading-relaxed text-[var(--color-text-secondary)]">
           {(() => {
             const text = t('agent.subtitle')
             const parts: React.ReactNode[] = []
@@ -529,7 +522,9 @@ function AgentHistoryPanel() {
     createConversation, renameWorkspace, deleteWorkspace,
   } = useAgentStore()
   const { t } = useTranslation()
-  // 归档默认隐藏（2026-09-22）
+  const helpId = useId()
+  const [showHelp, setShowHelp] = useState(false)
+  // 归档对话默认收起，按原项目分组展开。
   const [showArchived, setShowArchived] = useState(false)
   // 工作区：折叠态（默认全展开）与重命名态（2026-09-22）
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
@@ -565,52 +560,43 @@ function AgentHistoryPanel() {
   const archivedCount = conversations.filter(c => c.archived).length
 
   return (
-    <div className="flex flex-col h-full">
-      {/* 面板标题 */}
-      <div
-        className="flex items-center justify-between px-3 py-2 flex-shrink-0"
-        style={{ borderBottom: '1px solid var(--color-border)' }}
-      >
-        <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          {t('agent.allConversations')}
-        </span>
-        <div className="flex items-center gap-1">
-          {/* 归档开关（有归档项时才出现，2026-09-22） */}
-          {archivedCount > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowArchived(v => !v)}
-              className={showArchived ? 'text-xs text-[var(--color-accent)]' : 'text-xs text-[var(--color-text-muted)]'}
-            >
-              {t('agent.showArchived')} ({archivedCount})
-            </Button>
-          )}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => setShowHistory(false)}
-            className="text-xs text-[var(--color-text-muted)]"
-          >
-            {t('action.close')}
+    <section className="nf-agent-history" aria-label={t('agent.allConversations')}>
+      <header className="nf-agent-history-header">
+        <div className="nf-agent-history-title">
+          <History size={15} aria-hidden="true" />
+          <h2>{t('agent.allConversations')}</h2>
+          <Button type="button" variant="ghost" size="icon" className="size-8"
+            aria-label={t('agent.historyHelp')} data-tooltip={t('agent.historyHelp')}
+            aria-expanded={showHelp} aria-controls={helpId} onClick={() => setShowHelp(value => !value)}>
+            <SemanticIcon name="info" size={15} />
           </Button>
         </div>
-      </div>
+        {archivedCount > 0 && (
+          <Button type="button" variant="ghost" size="sm" aria-pressed={showArchived}
+            data-tooltip={t('agent.showArchived')} aria-label={t('agent.showArchived')}
+            onClick={() => setShowArchived(value => !value)}>
+            <Archive size={14} aria-hidden="true" /> <CountBadge value={archivedCount} />
+          </Button>
+        )}
+        <Button type="button" variant="ghost" size="icon" className="size-8"
+          aria-label={t('action.close')} data-tooltip={t('action.close')} onClick={() => setShowHistory(false)}>
+          <X size={15} aria-hidden="true" />
+        </Button>
+      </header>
+      <p id={helpId} className="nf-agent-history-help" hidden={!showHelp}>{t('agent.historyHelpText')}</p>
 
       {/* 会话列表：按**工作区**（小说项目）分组 */}
-      <div className="flex-1 overflow-y-auto px-2 py-2">
+      <div className="nf-agent-history-groups">
         {groups.length === 0 ? (
           <div className="flex items-center justify-center h-24 text-xs" style={{ color: 'var(--color-text-muted)' }}>
             {t('agent.noConversations')}
           </div>
         ) : (
           groups.map(g => (
-            <div key={g.key} className="mb-2">
+            <div key={g.key} className="nf-agent-history-group">
               {renamingWs === g.key ? (
                 /* 工作区重命名（内联输入；只改显示名，不动磁盘上的实际项目） */
-                <div className="flex items-center px-2 py-1 rounded" style={{ backgroundColor: 'var(--color-hover)' }}>
+                <div className="nf-agent-history-rename">
                   <input
                     autoFocus
                     value={wsDraft}
@@ -625,27 +611,21 @@ function AgentHistoryPanel() {
                   />
                 </div>
               ) : (
-                <div className="group/ws flex items-center gap-0.5 px-2 py-1">
-                  {/* 折叠箭头 + 工作区名 + 会话数（点整行切换折叠） */}
-                  <button
-                    onClick={() => setCollapsed(c => ({ ...c, [g.key]: !c[g.key] }))}
-                    className="flex items-center gap-1 flex-1 min-w-0 cursor-pointer text-micro font-medium"
-                    style={{ color: 'var(--color-text-muted)' }}
-                    title={g.name}
+                <div className="nf-agent-history-group-header">
+                  <button type="button" aria-expanded={!collapsed[g.key]}
+                    onClick={() => {
+                      setOpenMenuId(null)
+                      setCollapsed(previous => ({ ...previous, [g.key]: !previous[g.key] }))
+                    }}
+                    className="nf-agent-history-group-toggle" title={g.name}
                   >
-                    <ChevronRight
-                      size={10}
-                      className={collapsed[g.key] ? '' : 'rotate-90'}
-                      style={{ transition: 'transform 0.15s', flexShrink: 0 }}
-                    />
+                    <ChevronRight size={11} className="nf-agent-history-chevron" aria-hidden="true" />
+                    <Folder size={13} aria-hidden="true" />
                     <span className="truncate">{g.name}</span>
-                    <span className="flex-shrink-0 opacity-60">({g.items.length})</span>
+                    <CountBadge value={g.items.length} />
                   </button>
-                  {/* 工作区操作：新建对话 / 重命名 / 删除（hover 显示；尺寸与间距同会话行 —— 2026-10-16 回退到 20×20 + gap-0.5） */}
-                  <div
-                    className={`${ACT_BAR} flex-shrink-0 opacity-0 group-hover/ws:opacity-100 group-focus-within/ws:opacity-100 transition-opacity duration-150`}
-                    style={{ color: 'var(--color-text-secondary)' }}
-                  >
+                  {/* 操作按钮的热区与组标题保持独立。 */}
+                  <div className={`${ACT_BAR} nf-agent-history-group-actions`}>
                     <button
                       type="button"
                       className={ACT_BTN}
@@ -657,7 +637,7 @@ function AgentHistoryPanel() {
                         projectName: g.name,
                       })}
                     >
-                      <Plus size={12} />
+                      <CreateIcon size={12} />
                     </button>
                     <button
                       type="button"
@@ -688,7 +668,7 @@ function AgentHistoryPanel() {
                   </div>
                 </div>
               )}
-              {!collapsed[g.key] && g.items.map(conv => (
+              {!collapsed[g.key] && <div className="nf-agent-history-entries">{g.items.map(conv => (
                 <RecentConversationItem
                   key={conv.id}
                   title={conv.title}
@@ -712,28 +692,19 @@ function AgentHistoryPanel() {
                   onToggleArchive={() => archiveConversation(conv.id, !conv.archived)}
                   onDuplicate={() => duplicateConversation(conv.id)}
                 />
-              ))}
+              ))}</div>}
             </div>
           ))
         )}
       </div>
-    </div>
+    </section>
   )
 }
 
 // ===== 最近会话列表项 =====
 
-/**
- * 会话列表行内的小图标按钮统一样式。
- * ⚠️ 2026-09-27：原写 `w-5 h-5`（rem 制）在本仓 `html{font-size:14px}` 下实渲染 17.5px，
- * 低于 20×20 底线——旧注释写了「16×16 → 20×20」但数值没改对（标准 §5 的 rem 陷阱）。
- * ⚠️ 2026-10-16 用户裁决：本轮 32×32 的改动**全部回退**到 20×20（近 4 周里第三次试改这一处）。
- * 用户要动的是**行的选中范围**，不是按钮尺寸；按「用户的裁决 > 通用标准」处理。
- * 尺寸走 `w-[20px] h-[20px]` 原生 px 任意值（**不要**写 `w-5 h-5`：那是 17.5px 的历史坑）。
- * **不要再按标准把它改成 32×32**，除非用户再次提出。
- */
-const ACT_BTN = 'flex items-center justify-center w-[20px] h-[20px] rounded cursor-pointer hover:opacity-70 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
-/** 操作组排布：`gap-0.5`——原样（与 20px 按钮同批） */
+/** 行内操作保留紧凑热区，悬停时为图标提供独立底色。 */
+const ACT_BTN = 'nf-agent-history-action flex items-center justify-center w-[20px] h-[20px] rounded cursor-pointer'
 const ACT_BAR = 'flex items-center gap-0.5'
 
 function RecentConversationItem({
@@ -777,16 +748,16 @@ function RecentConversationItem({
   // 原形态 onKeyDown 只判 Enter（缺 Space）、且容器内含 5 个真按钮（button 角色不得有交互后代）。
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(title)
-  // 「更多」菜单锚点 = 触发按钮所在的容器（useFloatingPosition 用容器算 fixed 坐标，
-  // 不受列表 overflow 裁剪；264px 面板里绝对定位会被裁掉）
-  const moreAnchorRef = useRef<HTMLDivElement>(null)
-  const moreMenuRef = useFloatingPosition<HTMLDivElement>(moreAnchorRef, menuOpen, { placement: 'below', align: 'end' })
-  // 通用浮层三件套（ui-interaction-standard §1）：Esc + 点击外部 + 菜单项点击时显式关闭。
-  // 「点击外部」的检测范围 = 右侧整块（含触发按钮与菜单本体）——若只包触发按钮，
-  // mousedown 会先把菜单判成外部并卸载，click 永远落不到菜单项上。
-  const rightRef = useRef<HTMLDivElement>(null)
-  useOutsideClick(rightRef, () => onMenuOpenChange(false), menuOpen)
-  useEscapeKey(() => onMenuOpenChange(false), menuOpen)
+  const moreButton = useRef<HTMLButtonElement>(null)
+  const closeMenu = () => onMenuOpenChange(false)
+  const menuItems: ContextMenuEntry[] = [
+    ...(onDuplicate ? [{ key: 'duplicate', label: t('agent.duplicateConversation'), icon: <GitFork size={13} />, onClick: onDuplicate }] : []),
+    ...(onToggleArchive ? [{
+      key: 'archive', label: t(archived ? 'agent.unarchiveConversation' : 'agent.archiveConversation'),
+      icon: <Archive size={13} />, onClick: onToggleArchive,
+    }] : []),
+    { key: 'delete', label: t('agent.deleteConversation'), icon: <Trash2 size={13} />, danger: true, onClick: onDelete },
+  ]
 
   if (editing) {
     return (
@@ -808,22 +779,12 @@ function RecentConversationItem({
   }
 
   return (
-    /* ⚠️ 命名 group（`group/row`）：本行**自身**点亮 —— 悬停/键盘聚焦时整行出 `--color-hover` 底，
-       这就是「选中历史对话的范围」= 整行（此前只有标题那一小块亮，右侧按钮旁边是一片
-       「亮了却点不动」的空档 —— 用户 2026-10-16 明确指出的问题）。
-       ⚠️ 不能用无名 `group`：外层 `EmptyState` 的最近会话列表也带无名 group（`group-hover` 用于
-       别处），同名会互相触发。 */
-    <div
-      className={`group/row w-full flex flex-row items-center justify-between overflow-hidden rounded py-1.5 text-left px-2 box-border transition-colors hover:bg-[var(--color-hover)]${parentTitle ? ' pl-5' : ''}`}
-      style={{ backgroundColor: isActive ? 'var(--color-hover)' : undefined }}
-    >
-      {/* 主区域 = 原生 button（键盘 Tab/Enter/Space 可达）。**自身不再点亮**：整行的悬停底由上面的
-          行容器承担 —— 否则会出现「主按钮一块亮 + 行另一块亮」的双底，且两者之间有空档。
-          点击面 = 这一块 + 右侧操作按钮之外的整行；行内没有别的可点元素，故不存在死带。 */}
+    <div className={`group/row nf-agent-history-row${parentTitle ? ' pl-5' : ''}`} data-active={isActive || undefined}>
+      {/* 标题与工具按钮是兄弟元素，各自拥有完整的点击区域。 */}
       <button
         type="button"
         onClick={onClick}
-        className="flex items-center gap-x-1 overflow-hidden flex-1 min-w-0 text-left cursor-pointer"
+        aria-current={isActive || undefined} className="nf-agent-history-row-title"
       >
         {pinned && <Pin size={10} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />}
         <span
@@ -843,14 +804,8 @@ function RecentConversationItem({
         )}
       </button>
 
-      {/* 右侧：**按内容自适应**（不再写死 88px —— 那正是「hover 亮起却点不动」的根因：
-          5×20 + 4×gap = 107px 已溢出容器）。时间与操作组用 grid 叠在同一格做 opacity 交叉渐隐，
-          hover/focus 时**零布局跳动**。
-          ⚠️ 2026-10-16 用户裁决：**要修的是「这一行的选中范围」** —— 行的悬停/点击必须覆盖整行，
-          不能只有标题那一小块亮、右侧按钮旁边却是一片「亮了点不动」的空档。做法是让悬停底色
-          与点击面都落在**整行**上（行容器 `group` + 覆盖整行的主按钮），操作按钮作覆盖其上的兄弟，
-          只有按钮自己那一小块拦截点击。按钮尺寸回退到 20×20（用户要求改回原样式）。 */}
-      <div ref={rightRef} className="flex-shrink-0 ml-1 grid items-center justify-items-end" style={{ minHeight: 20 }}>
+      {/* 时间和操作组重叠，悬停、键盘聚焦和打开菜单都不改变行宽。 */}
+      <div className="nf-agent-history-row-tools">
         <span
           className={`col-start-1 row-start-1 text-micro whitespace-nowrap transition-opacity duration-150 ${
             menuOpen ? 'opacity-0' : 'opacity-60 group-hover/row:opacity-0 group-focus-within/row:opacity-0'
@@ -893,10 +848,11 @@ function RecentConversationItem({
             </button>
           )}
           {/* 「更多」触发器：自身尺寸同 ACT_BTN；菜单项不参与行 hover */}
-          <div className="relative" ref={moreAnchorRef}>
+          <div>
             <button
               type="button"
               className={ACT_BTN}
+              ref={moreButton}
               title={t('tip.moreOptions')}
               aria-label={t('tip.moreOptions')}
               aria-haspopup="menu"
@@ -907,32 +863,7 @@ function RecentConversationItem({
             </button>
           </div>
         </div>
-        {/* 菜单渲染在操作组**之外**：操作组带 opacity 门控，套在里面会连菜单一起透明 */}
-        {menuOpen && (
-          <PopoverSurface ref={moreMenuRef} className="py-1" style={{ minWidth: 180 }}>
-            {onDuplicate && (
-              <MenuItem
-                icon={<GitFork size={12} />}
-                label={t('agent.duplicateConversation')}
-                onClick={() => { onMenuOpenChange(false); onDuplicate() }}
-              />
-            )}
-            {onToggleArchive && (
-              <MenuItem
-                icon={<Archive size={12} />}
-                label={archived ? t('agent.unarchiveConversation') : t('agent.archiveConversation')}
-                onClick={() => { onMenuOpenChange(false); onToggleArchive() }}
-              />
-            )}
-            {/* 删除 = 不可逆且低频：菜单末尾 + danger 着色 + 既有二次确认 */}
-            <MenuItem
-              icon={<Trash2 size={12} />}
-              label={t('agent.deleteConversation')}
-              danger
-              onClick={() => { onMenuOpenChange(false); onDelete() }}
-            />
-          </PopoverSurface>
-        )}
+        {menuOpen && <ContextMenu anchor={moreButton} label={t('tip.moreOptions')} items={menuItems} onClose={closeMenu} />}
       </div>
     </div>
   )

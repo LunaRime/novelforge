@@ -1,3 +1,4 @@
+import { CreateIcon } from '../../ui/ActionIcons'
 /**
  * PublicationGroup — 连载监控（项目结构侧栏组）
  *
@@ -5,7 +6,7 @@
  * （字符频率 Dice）+ 审计告警（术语/水文）。相似度徽标分色提示平台删改风险。
  */
 import { useState, useEffect } from 'react'
-import { Satellite, Plus, Trash2 } from 'lucide-react'
+import { Satellite, Trash2 } from 'lucide-react'
 import MenuRow from '../../ui/MenuRow'
 import CountBadge from '../../ui/CountBadge'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -16,7 +17,7 @@ import { confirm } from '../../ui/Confirm'
 import { Button } from '../../ui/Button'
 import { Input } from '../../ui/Input'
 import { Label } from '../../ui/Label'
-import { Textarea } from '../../ui/Textarea'
+import MarkdownField from '../../ui/MarkdownField'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../../ui/Dialog'
@@ -95,8 +96,9 @@ export default function PublicationGroup({ projectPath }: Props) {
             className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
             style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
             title={t('pub.import')}
+            aria-label={t('pub.import')}
           >
-            <Plus size={12} />
+            <CreateIcon size={12} />
           </button>
         }
       />
@@ -144,6 +146,7 @@ export default function PublicationGroup({ projectPath }: Props) {
                 type="button"
                 className="flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity cursor-pointer flex-shrink-0"
                 title={t('action.delete')}
+                aria-label={t('action.delete')}
                 onClick={() => void handleDelete(e)}
                 style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
               >
@@ -253,7 +256,7 @@ function PublishImportDialog({ isOpen, onClose, existingNumbers }: {
             <Label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--color-text)' }}>
               {t('pub.externalContent')}
             </Label>
-            <Textarea
+            <MarkdownField startInEdit
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={5}

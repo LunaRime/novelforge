@@ -1,13 +1,17 @@
 import React, { memo, useRef, useState } from 'react'
 import { Brain, ChevronRight } from 'lucide-react'
-import ReactMarkdown, { type Components } from 'react-markdown'
+import ReactMarkdown, { type AllowElement, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { t } from '../../shared/locale'
 import { Table, type TableRow } from './Table'
+import { UNDERLINE_CLOSE, UNDERLINE_OPEN } from '../../shared/markdown-underline'
+import './markdown-document.css'
 
 interface MarkdownContentProps {
   content: string
   streaming?: boolean
+  /** 文档保留标题层级和单换行。 */
+  document?: boolean
 }
 
 /**
@@ -17,9 +21,10 @@ interface MarkdownContentProps {
  *
  * 渲染内核：react-markdown + remark-gfm（GFM 表格/任务列表/删除线/自动链接），
  * 自定义 components 保持既有视觉（代码块/表格/链接/标题/列表/引用）。
- * 不启用 rehype-raw —— 原始 HTML 不渲染（与旧手写实现一致，规避 XSS）。
+ * 文档支持下划线，其他原始 HTML 继续按原文显示。
  */
-export default memo(function MarkdownContent({ content, streaming }: MarkdownContentProps) {
+export default memo(function MarkdownContent({ content, streaming, document }: MarkdownContentProps) {
+  if (document) return <div className="nf-markdown-document"><MarkdownBody content={content} document /></div>
   // 解析 <think> 标签：将内容拆分为 [thinking?, ...markdownSegments]
   const segments = parseThinkSegments(content)
 
@@ -156,10 +161,45 @@ const markdownComponents: Components = {
   em: ({ children }) => <em>{children}</em>,
 }
 
-/** 用 react-markdown 渲染单段 markdown 正文 */
-function MarkdownBody({ content }: { content: string }) {
+const documentComponents: Components = {
+  ...markdownComponents,
+  h1: ({ children }) => <h1>{children}</h1>,
+  h2: ({ children }) => <h2>{children}</h2>,
+  h3: ({ children }) => <h3>{children}</h3>,
+  p: ({ children }) => <p>{children}</p>,
+  blockquote: ({ children }) => <blockquote>{children}</blockquote>,
+  strong: ({ children }) => <strong>{children}</strong>,
+}
+
+type MarkdownParent = NonNullable<Parameters<AllowElement>[2]>
+
+/** 成对下划线标记转换为固定的无属性节点，不解析原始 HTML。 */
+function rehypeUnderline() {
+  return function unwrapUnderline(parent: MarkdownParent): void {
+    const children = parent.children
+    const opens: number[] = []
+    for (let index = 0; index < children.length; index++) {
+      const child = children[index]
+      if (child.type === 'element') unwrapUnderline(child)
+      if (child.type !== 'raw') continue
+      if (child.value === UNDERLINE_OPEN) opens.push(index)
+      if (child.value !== UNDERLINE_CLOSE) continue
+      const open = opens.pop()
+      if (open === undefined) continue
+      children.splice(open, index - open + 1, {
+        type: 'element', tagName: 'u', properties: {},
+        children: children.slice(open + 1, index) as Extract<MarkdownParent, { type: 'element' }>['children'],
+      })
+      index = open
+    }
+  }
+}
+
+/** 文档和对话共用 Markdown 解析，文档保留章节标题。 */
+function MarkdownBody({ content, document }: { content: string; document?: boolean }) {
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={document ? [rehypeUnderline] : undefined}
+      components={document ? documentComponents : markdownComponents}>
       {content}
     </ReactMarkdown>
   )

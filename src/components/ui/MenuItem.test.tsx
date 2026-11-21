@@ -3,7 +3,7 @@
  * MenuItem — 菜单项按钮（2026-09-25 扩展，批次 4 剩余项 2）
  *
  * 原有 props（label/onClick/icon/shortcut/disabled/danger）保持不变，新增三项以收编
- * 三处自绘菜单项（AgentInputBox 的 ContextMenuItem / ModelMenuItem、RightToolWindowBar
+ * 三处菜单入口（AgentInputBox 的 ContextMenuItem / ModelMenuItem、WorkbenchHeader
  * 的主题项）：
  * - `selected`：当前选中 → **accent 文字 + 尾部 Check**
  * - `trailing`：Check 之前的内容（provider 徽标、comingSoon 提示）

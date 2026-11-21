@@ -1,270 +1,97 @@
 <div align="center">
 
-# 🔥 NovelForge — AI Novel Writing IDE
+<img src="build/icon.png" width="88" height="88" alt="NovelForge app icon">
 
-**An AI-powered integrated development environment built for web novel authors.**
+# NovelForge
 
-[![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
-[![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6.svg)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/Version-0.1.6-orange.svg)]()
-[![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
-[![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
+**An open-source desktop writing workspace for long-form fiction, with AI built in.**
 
-[🇬🇧 English] &nbsp; [🇨🇳 中文](README.md)
+Plan your world, cast, and chapters. Draft, revise, and finalize the manuscript in the same app.
+
+[![Stable release 0.1.7](https://img.shields.io/badge/Release-0.1.7-397665)](https://github.com/LunaRime/novelforge/releases/latest)
+[![Build and checks](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
+[![GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-536276)](LICENSE)
+
+**[Download for Windows](https://github.com/LunaRime/novelforge/releases/latest) · [Project website](https://lunarime.github.io/novelforge/) · [Changelog](CHANGELOG.md)**
+
+[简体中文](README.md) · **English** · [Русский](README.ru.md)
 
 </div>
 
----
+![NovelForge workspace showing the project tree, manuscript, and writing assistant](site/assets/workbench.png)
 
-> **NovelForge** is an open-source, privacy-first AI writing IDE. It deeply integrates LLM-driven full workflows with a local RAG knowledge base, delivering an IDE-grade immersive writing experience. Supports **zh-CN / en-US / ru-RU** trilingual interface.
+## Quick start
 
----
+On the [stable release page](https://github.com/LunaRime/novelforge/releases/latest), choose the Windows x64 installer, `NovelForge-{version}-Installer.exe`, or extract `NovelForge-{version}-Portable.7z` and run `NovelForge.exe`. The app is available in Simplified Chinese, English, and Russian.
 
-### 🔔 Important Note on Versioning
+### Create or open a novel project
 
-> Starting from v2.5.2, NovelForge has officially entered the **0.y.z early development phase**. This is not a "regression" — it's an honest signal to the community about where the project stands:
->
-> - LLM output quality and UI interactions are still being actively tuned
-> - Core APIs and workflows have not yet stabilized; breaking changes may occur
-> - Each `0.x.x` release is one small step toward the goal: "making AI write satisfying fiction"
->
-> We welcome you to join as an **early tester** — the more feedback we get, the faster the project matures.
+[![Video tutorial preview showing the NovelForge welcome screen and project workspace](site/media/quickstart.webp)](https://lunarime.github.io/novelforge/media/quickstart.webm)
 
----
+Choose **New Project** on the welcome screen, give your novel a name, and pick a local folder. To continue an existing novel, choose **Open Project** and select its folder. In the workspace, use the sidebar to switch among novel settings, chapter blueprints, manuscripts, and the knowledge base.
 
-## 📸 Screenshots
+### Edit a manuscript and read chapters
 
-| Main Editor (Chinese) | Main Editor (English) |
-|-----------------------|----------------------|
-| ![Chinese UI](screenshots/main-editor-zh.png) | ![English UI](screenshots/main-editor-en.png) |
+[![Video tutorial preview showing the manuscript editor and reading mode](site/media/writing.webp)](https://lunarime.github.io/novelforge/media/writing.webm)
 
-| Welcome (English) | Welcome (Chinese) |
-|-------------------|-------------------|
-| ![Welcome](screenshots/welcome-en.png) | ![Welcome ZH](screenshots/welcome-zh.png) |
+Open a chapter from the sidebar, select text in the editor, and use the formatting controls to apply Markdown styles such as bold or italics. After saving, open **Reading mode** to browse novels and chapters in a dedicated read-only view. When you switch back to a chapter, the reader restores its scroll position.
 
-| Model & Provider Setup | Settings (English) |
-|------------------------|--------------------|
-| ![Settings](screenshots/settings-zh.png) | ![Settings EN](screenshots/settings-en.png) |
+## Writing features
 
----
+| Stage | What you can do |
+| --- | --- |
+| Plan a novel | Manage worldbuilding, plot, and character profiles. Break an outline into chapter blueprints, organize them into volumes, and track progress on a chapter board. |
+| Draft and revise | Write on a Markdown manuscript page and use focus mode to concentrate on the current paragraph. Stream an AI draft, rewrite selected passages, request editorial reviews, and compare versions using snapshots and experimental branches. |
+| Maintain continuity | Track events, foreshadowing, and character state with chapter, volume, and book summaries. Inspect, edit, and rebuild the project's AI memory. |
+| Give AI project context | Search research and story material in a local knowledge base that combines full-text and semantic search. The writing assistant can consult project context, run workflows, and use tools from MCP servers. |
+| Manage models and usage | Use OpenAI-compatible services such as OpenAI and DeepSeek, Gemini, Anthropic, or local Ollama. Assign different models to creative, analytical, and lightweight tasks, and track writing activity, calls, tokens, and cost. |
 
-## Why NovelForge?
+Add a provider in the app's model settings and enable the models you want to use. A local Ollama embedding model enables offline semantic search in the knowledge base.
 
-Writing a web novel is not just about typing words — it's about managing a complex system of characters, plot threads, worldbuilding rules, and chapter-level pacing across hundreds of chapters. Traditional writing tools treat this like a text document. NovelForge treats it like a software project.
+## Architecture and data
 
-| Pain Point | NovelForge Solution |
-|------------|---------------------|
-| Losing track of characters across 100+ chapters | Character cards with cross-chapter dynamic tracking + voice consistency analysis |
-| Forgetting foreshadowing planted 50 chapters ago | Automatic foreshadowing scanner + resolution detector |
-| Spending $200+/month on AI API calls | Tiered model routing saves 50-70% + prompt caching cuts input costs by 50% |
-| Copy-pasting context between AI chat and editor | AI agent directly reads/writes your project — context is automatic |
-| No way to compare draft versions | Multi-draft parallel generation with AI auto-scoring |
-| Privacy concerns with cloud writing tools | 100% local storage: SQLite + LanceDB, works offline |
+React 19, TypeScript 6, and CodeMirror 6 power the writing interface, which is built with Vite 8. Electron 43 runs the renderer in a sandbox and connects it to the main process through typed IPC. The independent TypeScript core defines writing and storage use cases and can be compiled separately.
 
-## How It Works
+Standard projects store chapters and settings on your machine. SQLite stores relational data and full-text indexes, and LanceDB stores vector indexes. AI requests go to the configured model service. With a remote provider, the context sent for a request can include manuscript excerpts or retrieved material. You can also route AI requests to local models.
 
-![NovelForge architecture](screenshots/architecture.en.png)
+- [Architecture documentation](docs/architecture/README.md) covers the application layer, core use cases, and storage design.
+- The [architecture overview](screenshots/architecture.en.png) was generated with [archify](https://github.com/tt-a1i/archify) from its [diagram source](docs/diagrams/novelforge-architecture.en.json).
 
-> Author → Interface → IPC Trust Bridge → Creation Engine → LLM Services. Chapters, settings and the vector
-> index all stay **on your machine** — only model calls go online.
-> Generated with [archify](https://github.com/tt-a1i/archify) from `docs/diagrams/novelforge-architecture.en.json`
-> (Chinese version in [README.md](README.md)).
+## Run from source
 
-The chapter pipeline itself: 📋 Blueprint → ✍️ Draft → 🔍 Review → ✨ Finalize → post-process, all backed by a local
-RAG store (SQLite + LanceDB) and gated by your confirmation at every step.
+Use **Node.js 22.19+** and **pnpm 9.15.4**. If you need to compile native dependencies, install Python 3 and your platform's C++ toolchain. On Windows, use Visual Studio Build Tools with the C++ desktop development workload.
 
-## ✨ Key Features
-
-### 🧬 AI Writing Pipeline
-
-| Feature | Description |
-|---------|-------------|
-| World & Setting Management | Global worldbuilding, plot backbone, character profiles (cross-chapter dynamic tracking) |
-| Auto Outline & Beats | AI generates structural skeleton → chapter beats → scene/emotion/pacing requirements |
-| Auto Chapter Splitting | AI analyzes outline and suggests chapter count, volume structure, and climax positions |
-| Streaming Chapter Generation | Per-chapter streaming typewriter generation with precise context awareness |
-| Chapter Transition Engine | Extracts scene cards from previous 3 chapters and injects into prompts for continuity |
-| Paragraph-Level Rewriting | Expand / condense / style shift / conflict enhance / polish — five modes, no full rewrite |
-| Editorial Board Review | 5-role parallel review (editor-in-chief / plot / prose / continuity / style) + weighted scoring |
-| Character Voice Consistency | Analyzes character dialogue style post-finalization, auto-injects for consistency |
-| Multi-Draft Comparison | Parallel generation of multiple versions per chapter, AI auto-scoring |
-| Foreshadowing Manager | Auto-scans for new foreshadowing + detects resolution of existing threads |
-| Post-Process Pipeline | Ingest → plot extraction → character update → foreshadowing scan → voice analysis → style learning (DAG parallel) |
-| Multilingual Prompt Templates | Built-in templates in EN/RU (19 templates + system constraints + system roles), AI output language follows the UI language |
-
-### 📊 Writing Activity Dashboard
-
-| Feature | Description |
-|---------|-------------|
-| Daily Activity Heatmap | GitHub Contribution-style full-year view, hover for per-day writing/revision/calls/cost |
-| Monthly Trend Chart | 12-month writing trend with year switching for history |
-| Global Statistics | Cross-project aggregation of written words / revisions / model calls / tokens / cost |
-
-### 🔍 Observability
-
-| Feature | Description |
-|---------|-------------|
-| Dual-Environment Logs | Dev (DEBUG full) vs release (INFO+) separate directories; renderer logs persisted + global error capture |
-| LLM Extraction Logs | Call/JSON-parse/self-check retry fully visible, full diagnostics on parse failure |
-| Save Feedback | Toast feedback for every save operation + modular logs (Save:{Module}) |
-
-### 🧠 Million-Word Local Knowledge Base + Vector Engine
-
-| Feature | Description |
-|---------|-------------|
-| LLM + Vector Hybrid Retrieval | Semantic search + full-text search, auto-injected into AI prompts |
-| LLM-as-Vectorization | Use your LLM as the embedding model — no dedicated embedding API needed |
-| Local Embedding Model | Optional local Ollama (e.g. bge-m3) for offline semantic search; four-step fallback: local ⇄ cloud API → LLM → full-text |
-| Chinese Text Search | jieba tokenization + FTS index — Chinese queries no longer degrade to whole-sentence matching |
-| IVF_PQ Vector Index | LanceDB ANN index for large-scale vector search acceleration |
-| 100% Local Storage | SQLite + LanceDB, works offline |
-
-### 💭 AI Memory (Story Memory)
-
-| Feature | Description |
-|---------|-------------|
-| Three-Level Summaries | Finalize a chapter → chapter memory; complete the volume → volume memory; every 3 volumes → book state |
-| Cross-Session Facts | Conversation compaction extracts reusable facts so the next chat starts informed — at no extra cost |
-| Invalidation & Rebuild | Editing volume boundaries or re-finalizing marks affected memory as "needs rebuild"; stale memory stops entering context |
-| Inspect & Edit | The "AI Memory" sidebar group lets you view / edit / delete files and manually rebuild volumes and the book state |
-
-### 💰 Cost Optimization Engine
-
-| Feature | Description |
-|---------|-------------|
-| Tiered Model Routing | elite / standard / budget — three tiers, saves 50-70% |
-| Prompt Caching | Automatic cache hits, cuts input costs by 50% |
-| Real-Time Cost Tracking | Live session cost display in the status bar |
-| Token Budget Engine | Intelligent truncation with system prompt size control |
-
-### 🤖 AI Agent Assistant
-
-| Feature | Description |
-|---------|-------------|
-| Intent Pre-Routing | Zero-LLM local intent detection ("write chapter 3", "polish chapter 2") — strong hits trigger creative workflows directly, weak hits ask for clarification |
-| Conversation Branching | Fork a new session from any message / rewind with recovery, branch hierarchy in history panel |
-| Tool Result Spill-to-Disk | Long tool results stored on disk with path + summary in context; LLM re-reads on demand (deterministic naming + dedupe) |
-| Adaptive Context Compression | Budget scales with model window; recoverable errors auto-degrade and retry (withhold-then-recover) |
-| Tools & Skills | 23 built-in tools (read/write, retrieval, editing, workflows) + SKILL.md skill packs (built-in / user / project, Cursor-compatible) |
-| MCP | Plug in any MCP server to extend the tool surface |
-| Context Visibility | Usage ring + detail popover (base / memory / history / current), live cost and cache-hit readout |
-
-### 🛡️ Privacy & Security
-
-| Feature | Description |
-|---------|-------------|
-| Electron Sandbox | `sandbox: true` + IPC allowlist + path sandbox |
-| API Key Encryption | Electron safeStorage encrypted storage |
-| Exponential Backoff Retry | Auto-retry for 429/503/5xx + streaming retry |
-| Database Integrity | SQLite PRAGMA checks + unified timestamps + CHECK constraints |
-
----
-
-## 🚀 Installation
-
-### 📦 Pre-built Releases (Recommended)
-
-Download the latest from [Releases](https://github.com/LunaRime/novelforge/releases):
-- **Windows**: `NovelForge-{version}-Installer.exe` (NSIS installer)
-- **Windows**: `NovelForge-{version}-Portable.zip` (portable, extract and run)
-
-### 🔨 Build from Source
-
-#### Requirements
-
-| Tool | Version | Notes |
-|------|---------|-------|
-| **Node.js** | `>= 22.x` | Matches Electron 41's bundled version |
-| **pnpm** | `>= 9.x` | Package manager |
-| **Python** | `>= 3.10` | Required to compile native modules (`better-sqlite3`, `lancedb`) |
-| **C++ Toolchain** | — | Windows: Visual Studio Build Tools · macOS: Xcode CLT · Linux: `build-essential` |
-
-#### Quick Start
-
-```bash
-# 1. Clone
+```sh
 git clone https://github.com/LunaRime/novelforge.git
 cd novelforge
-
-# 2. Install dependencies
 pnpm install
-
-# 3. Development mode (Vite HMR)
 pnpm run dev
+```
 
-# 4. Type check
+```sh
 pnpm run typecheck
-
-# 5. Run tests
+pnpm run lint
 pnpm run test
+```
 
-# 6. Full build
-npm_config_user_agent="pnpm/9.15.4" \
-CSC_IDENTITY_AUTO_DISCOVERY=false \
-ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/" \
+Run `pnpm run rebuild` if `better-sqlite3` needs to be rebuilt against Electron's ABI. The [development tools script](scripts/dev-instance.mjs) can manage isolated instances and open the developer console.
+
+<details>
+<summary>Package the Windows installer and portable build</summary>
+
+Open PowerShell on Windows and run these commands.
+
+```powershell
+$env:npm_config_user_agent = 'pnpm/9.15.4'
+$env:CSC_IDENTITY_AUTO_DISCOVERY = 'false'
+$env:ELECTRON_BUILDER_BINARIES_MIRROR = 'https://npmmirror.com/mirrors/electron-builder-binaries/'
 pnpm run build
 ```
 
-> **Build environment variables**:
-> - `npm_config_user_agent` — Forces electron-builder to detect pnpm
-> - `CSC_IDENTITY_AUTO_DISCOVERY=false` — Skips code signing (not needed for local builds)
-> - `ELECTRON_BUILDER_BINARIES_MIRROR` — Mirror for faster downloads (essential in China; optional elsewhere)
->
-> Build output is organized by release type at `release/{type}/{version}/` (`alpha` internal / `beta` public / `stable` release):
-> - `NovelForge-{version}-Portable/` — Portable edition (`.7z` archive auto-generated for beta/stable)
-> - `NovelForge-{version}-Installer/NovelForge-{version}-Installer.exe` — NSIS installer
-> - `latest.yml` / `.blockmap` — electron-updater metadata
+Build output is organized under `release/{type}/{version}/`. Stable builds go to `release/stable/{version}/` and include the NSIS installer, portable build, and update metadata.
 
-#### Windows Build Issues
+</details>
 
-| Issue | Solution |
-|-------|----------|
-| winCodeSign 7z symlink download failure | Manually extract to `%LOCALAPPDATA%/electron-builder/Cache/winCodeSign/` |
-| NSIS 7z symlink download failure | Extract to `%LOCALAPPDATA%/electron-builder/Cache/nsis/` |
-| pnpm not detected | Set `npm_config_user_agent=pnpm/9.15.4` |
-| GitHub download timeout | Set `ELECTRON_BUILDER_BINARIES_MIRROR` mirror |
+## License and credits
 
-#### Native Modules
-
-The project depends on two native modules: `better-sqlite3` and `@lancedb/lancedb`.
-
-```bash
-# Rebuild native modules for Electron's bundled Node version
-pnpm run rebuild
-```
-
----
-
-## ⚙️ Model Configuration
-
-Supports `OpenAI` · `DeepSeek` · `Gemini` · `Claude` · `Ollama` · `Zhipu GLM` · any OpenAI-compatible API.
-
-- **Provider accounts** — one credential, many models: add a provider and it **fetches the available model list automatically**; tick the models you want and switch between them without re-entering keys
-- **Tiered routing** — assign a model to each of the three tiers (creative writing / standard analysis / lightweight), so expensive models only handle the work that needs them
-- **Local embedding model** — one-click download inside the app (multi-path speed probing + resumable transfer + automatic rerouting when a path stalls)
-
----
-
-## 🏗️ Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19 + TypeScript + Zustand + Tailwind CSS + Radix UI |
-| Desktop | Electron 41 + Vite 8 |
-| Data | better-sqlite3 (relational) + LanceDB (vector) |
-| AI | OpenAI Protocol + Gemini Protocol + MCP + ReAct Agent |
-| Testing | Vitest + Storybook |
-| CI/CD | GitHub Actions (ubuntu / windows / macos matrix) |
-
----
-
-## 📄 License
-
-GPL-3.0 open source. Originally forked from [Vela](https://github.com/heider-x/vela) by heider-x, maintained and developed by LunaRime.
-
----
-
-<div align="center">
-<b>NovelForge — Forge your novel with AI.</b>
-</div>
+NovelForge is open source under the [GPL-3.0](LICENSE). It began as a fork of [Vela](https://github.com/heider-x/vela) by heider-x and is maintained by [LunaRime](https://github.com/LunaRime). Feedback is welcome on [GitHub Issues](https://github.com/LunaRime/novelforge/issues).

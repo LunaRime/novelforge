@@ -1,21 +1,25 @@
+import { useSaveShortcutTitle } from '../../lib/save-shortcut'
 /**
  * EditorToolbar — 草稿编辑器顶部工具栏
  *
- * 显示章节标题、版本号、字数统计、保存状态、AI 操作按钮、定稿按钮。
+ * 展示文档状态并执行保存、修稿、审稿与定稿。
  * 从 DraftEditor 提取，减少父组件复杂度。
  */
 import { memo } from 'react'
-import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench, Languages } from 'lucide-react'
+import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench, Languages, Type } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Select, SelectTrigger, SelectContent, SelectItem } from '../ui/Select'
 import { useTranslation } from '../../hooks/useTranslation'
+import { useLayoutStore } from '../../stores/layout-store'
 import type { DraftMeta, DraftStatus } from '../../services/workflows/chapter-workflow'
 import type { RevisionEntry } from '../../services/draft-index'
 import { DRAFT_STATUS_LABEL_KEY, DRAFT_STATUS_COLOR } from '../../shared/draft-status'
 import type { TextKey } from '../../shared/locale'
 import { VersionActions, type VersionAction } from './VersionActions'
+import './document-toolbar.css'
 
 export interface EditorToolbarProps {
+  textToolsRef?: (node: HTMLDivElement | null) => void
   /** 草稿元数据（null 时显示占位） */
   meta: (DraftMeta & { chapterTitle?: string }) | null
   /** 当前字符数 */
@@ -53,6 +57,7 @@ export interface EditorToolbarProps {
 }
 
 function EditorToolbar({
+  textToolsRef,
   meta,
   charCount,
   isDirty,
@@ -72,67 +77,63 @@ function EditorToolbar({
   onOpenReview,
 }: EditorToolbarProps) {
   const { t } = useTranslation()
+  const saveTitle = useSaveShortcutTitle()
   const status: DraftStatus = meta?.status ?? 'draft'
 
+  const statusLabel = isReadonly
+    ? t(status === 'finalized' ? 'status.readOnly' : 'status.archived')
+    : t(DRAFT_STATUS_LABEL_KEY[status] as TextKey) ?? status
+
   return (
-    <div
-      className="nf-version-action-container flex items-center justify-between gap-2 px-2 sm:px-3 h-9 flex-shrink-0"
-      style={{
-        borderBottom: '1px solid var(--color-border)',
-        backgroundColor: 'var(--color-editor-bg)',
-      }}
-    >
-      {/* 标题和版本显示在稿纸上，工具栏保留当前文档的操作。 */}
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text-secondary)' }}>
-          {meta ? t('chapter.label').replace('{n}', String(meta.chapterNumber)) : t('editor.draft')}
+    <div className="nf-document-toolbar nf-version-action-container" data-extra-actions={pendingRevisions.length > 0 || reviewCount > 0}
+      role="group" aria-label={t('panel.editor')}>
+      <div className="nf-document-state">
+        <span className="nf-document-badge" style={{ color: DRAFT_STATUS_COLOR[status] }} title={statusLabel}>
+          <span className="truncate">{statusLabel}</span>
         </span>
+        {isDirty && !isReadonly && (
+          <span className="nf-document-dirty" title={t('statusbar.unsaved')} aria-label={t('statusbar.unsaved')} />
+        )}
+        {charCount > 0 && (
+          <span className="nf-version-actions-wide text-xs tabular-nums text-[var(--color-text-muted)]">
+            {charCount.toLocaleString()} {t('unit.chars')}
+          </span>
+        )}
       </div>
-
-      {/* 右侧操作区 */}
-      {!isReadonly && (
-        <RightActions
-          charCount={charCount}
-          isDirty={isDirty}
-          saving={saving}
-          isChapterBusy={isChapterBusy}
-          pendingRevisions={pendingRevisions}
-          reviewCount={reviewCount}
-          status={status}
-          onSave={onSave}
-          onRefine={onRefine}
-          onReview={onReview}
-          onTranslate={onTranslate}
-          onFinalize={onFinalize}
-          onOpenRevision={onOpenRevision}
-          onOpenReview={onOpenReview}
-        />
-      )}
-
-      {/* 已定稿/归档 → 只读提示 + 修复按钮 */}
-      {isReadonly && (
-        <ReadonlyActions
-          charCount={charCount}
-          isChapterBusy={isChapterBusy}
-          hasProcessFailure={hasProcessFailure}
-          status={status}
-          onRepairFinalize={onRepairFinalize}
-        />
-      )}
+      <div className="nf-document-actions">
+        {/* 稿纸外观从当前文档直达，设置和正文继续使用同一套作者偏好。 */}
+        <Button type="button" variant="ghost" size="icon" className="nf-document-appearance size-8"
+          title={t('settings.typography')} aria-label={t('settings.typography')}
+          onClick={() => useLayoutStore.getState().openSettings('editor')}>
+          <Type size={15} aria-hidden="true" />
+        </Button>
+        {!isReadonly && (
+          <DraftVersionActions
+            isChapterBusy={isChapterBusy} pendingRevisions={pendingRevisions} reviewCount={reviewCount}
+            onRefine={onRefine} onReview={onReview} onTranslate={onTranslate} onFinalize={onFinalize}
+            onOpenRevision={onOpenRevision} onOpenReview={onOpenReview} />
+        )}
+        {!isReadonly && isDirty && (
+          <Button type="button" variant="default" className="min-h-8" onClick={onSave} disabled={saving} title={saveTitle}>
+            <Save size={13} aria-hidden="true" />
+            {saving ? t('status.saving') : t('editor.save')}
+          </Button>
+        )}
+        {isReadonly && status === 'finalized' && hasProcessFailure && (
+          <Button type="button" variant="outline" size="sm" onClick={onRepairFinalize} disabled={isChapterBusy} title={t('tip.retryPostProcess')}>
+            <Wrench size={13} aria-hidden="true" /> {t('editor.repairBtn')}
+          </Button>
+        )}
+        {textToolsRef && <div ref={textToolsRef} className="shrink-0" />}
+      </div>
     </div>
   )
 }
 
-/** 正常编辑模式下的右侧操作区 */
-function RightActions({
-  charCount,
-  isDirty,
-  saving,
+function DraftVersionActions({
   isChapterBusy,
   pendingRevisions,
   reviewCount,
-  status,
-  onSave,
   onRefine,
   onReview,
   onTranslate,
@@ -140,14 +141,9 @@ function RightActions({
   onOpenRevision,
   onOpenReview,
 }: {
-  charCount: number
-  isDirty: boolean
-  saving: boolean
   isChapterBusy: boolean
   pendingRevisions: RevisionEntry[]
   reviewCount: number
-  status: DraftStatus
-  onSave: () => void
   onRefine: () => void
   onReview: () => void
   onTranslate: (lang: 'zh' | 'en' | 'ru') => void
@@ -168,102 +164,33 @@ function RightActions({
   })
   actions.push(
     { label: t('editor.aiPolishBtn'), title: t('tip.aiPolish'), icon: <Sparkles size={12} />,
-      onSelect: onRefine, variant: 'ai', disabled: isChapterBusy },
+      onSelect: onRefine, variant: 'outline', disabled: isChapterBusy },
     { label: t('editor.aiReviewBtn'), title: t('tip.aiReview'), icon: <Search size={12} />,
-      onSelect: onReview, variant: 'ai', disabled: isChapterBusy },
+      onSelect: onReview, variant: 'outline', disabled: isChapterBusy },
     { label: t('editor.finalizeBtn'), title: t('tip.finalize'), icon: <BadgeCheck size={12} />,
-      onSelect: onFinalize, variant: 'success', disabled: isChapterBusy },
+      onSelect: onFinalize, variant: 'outline', disabled: isChapterBusy },
   )
   const languages = ['zh', 'en', 'ru'] as const
   return (
-    <div className="flex items-center gap-1.5 flex-shrink-0">
-      {charCount > 0 && (
-        <span className="nf-version-actions-wide text-xs tabular-nums mr-1" style={{ color: 'var(--color-text-muted)' }}>
-          {charCount.toLocaleString()} {t('unit.chars')}
-        </span>
-      )}
-      {isDirty && (
-        <>
-          <span
-            className="w-1.5 h-1.5 rounded-full flex-shrink-0 mr-0.5"
-            style={{ backgroundColor: 'var(--color-warning)' }}
-            title={t('statusbar.unsaved')}
-          />
-          <Button variant="outline" size="sm" onClick={onSave} disabled={saving} title={t('tip.saveShortcut')}>
-            <Save size={12} />
-            {saving ? t('status.saving') : t('editor.save')}
-          </Button>
-        </>
-      )}
-      <span
-        className="text-micro px-1.5 py-0.5 rounded flex-shrink-0"
-        style={{
-          backgroundColor: 'var(--color-hover)',
-          color: DRAFT_STATUS_COLOR[status] ?? 'var(--color-text-muted)',
-        }}
-      >
-        {t(DRAFT_STATUS_LABEL_KEY[status] as TextKey) ?? status}
-      </span>
-      <VersionActions
-        actions={actions}
-        overflowExtra={languages.map(lang => ({
-          label: `${t('translate.title')} ${t(`translate.lang.${lang}`)}`,
-          icon: <Languages size={12} />,
-          onSelect: () => onTranslate(lang),
-        }))}
-        wideExtra={
-          <Select value="" onValueChange={(v) => onTranslate(v as typeof languages[number])}>
-            <SelectTrigger className="h-6 w-auto min-w-[4.5rem] rounded text-micro" title={t('translate.title')}>
-              <Languages size={11} />
-              <span style={{ color: 'var(--color-text)' }}>{t('translate.title')}</span>
-            </SelectTrigger>
-            <SelectContent>
-              {languages.map(lang => <SelectItem key={lang} value={lang}>{t(`translate.lang.${lang}`)}</SelectItem>)}
-            </SelectContent>
-          </Select>
-        }
-      />
-    </div>
-  )
-}
-
-/** 只读模式下的右侧显示 */
-function ReadonlyActions({
-  charCount,
-  isChapterBusy,
-  hasProcessFailure,
-  status,
-  onRepairFinalize,
-}: {
-  charCount: number
-  isChapterBusy: boolean
-  hasProcessFailure: boolean
-  status: DraftStatus
-  onRepairFinalize: () => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <div className="flex items-center gap-2 flex-shrink-0">
-      {charCount > 0 && (
-        <span className="nf-version-actions-wide text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-          {charCount.toLocaleString()} {t('unit.chars')}
-        </span>
-      )}
-      <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        {status === 'finalized' ? t('status.readOnly') : t('status.archived')}
-      </span>
-      {status === 'finalized' && hasProcessFailure && (
-        <Button
-          variant="outline" size="sm"
-          onClick={onRepairFinalize}
-          disabled={isChapterBusy}
-          title={t('tip.retryPostProcess')}
-        >
-          <Wrench size={11} />
-          {t('editor.repairBtn')}
-        </Button>
-      )}
-    </div>
+    <VersionActions
+      actions={actions}
+      overflowExtra={languages.map(lang => ({
+        label: `${t('translate.title')} ${t(`translate.lang.${lang}`)}`,
+        icon: <Languages size={12} />,
+        onSelect: () => onTranslate(lang),
+      }))}
+      wideExtra={
+        <Select value="" onValueChange={(v) => onTranslate(v as typeof languages[number])}>
+          <SelectTrigger className="h-6 w-auto min-w-[4.5rem] rounded text-micro" title={t('translate.title')}>
+            <Languages size={11} />
+            <span style={{ color: 'var(--color-text)' }}>{t('translate.title')}</span>
+          </SelectTrigger>
+          <SelectContent>
+            {languages.map(lang => <SelectItem key={lang} value={lang}>{t(`translate.lang.${lang}`)}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      }
+    />
   )
 }
 

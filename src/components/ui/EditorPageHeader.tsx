@@ -13,10 +13,7 @@ interface EditorPageHeaderProps {
 }
 
 /**
- * 编辑器页头 — 章节蓝图 / 章节看板 / 世界观时间线共用的 h-10 工具栏。
- *
- * 只负责版式：图标 + 标题 + meta + 右侧动作。具体动作与数据仍由页面自己提供，
- * 避免把业务塞进一个「万能页头」。
+ * 章节蓝图、章节看板和时间线共用页头。操作随可用宽度换行，页面保留自身的数据和事件。
  */
 export default function EditorPageHeader({
   icon,
@@ -27,20 +24,17 @@ export default function EditorPageHeader({
   className,
 }: EditorPageHeaderProps) {
   return (
-    <div
-      className={cn('flex items-center justify-between gap-2 px-3 h-10 flex-shrink-0 border-b', className)}
-      style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-sidebar)' }}
-    >
-      <div className="flex items-center gap-1.5 min-w-0">
-        <span className="flex flex-shrink-0 items-center" style={{ color: 'var(--color-text-muted)' }}>
+    <header className={cn('flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-border)] bg-[var(--color-editor-bg)] px-3 py-2', className)}>
+      <div className="flex min-w-0 items-center gap-2">
+        <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center text-[var(--color-accent)]">
           {icon}
         </span>
-        <span className="min-w-0 truncate text-sm font-medium" style={{ color: 'var(--color-text)' }}>
+        <h2 className="min-w-0 truncate text-base font-semibold text-[var(--color-text)]" title={title}>
           {title}
-        </span>
+        </h2>
         {meta && <span className="flex min-w-0 items-center gap-1">{meta}</span>}
       </div>
-      {actions && <div className={cn('flex flex-shrink-0 items-center gap-1', actionsClassName)}>{actions}</div>}
-    </div>
+      {actions && <div className={cn('flex min-w-0 flex-wrap items-center gap-1', actionsClassName)}>{actions}</div>}
+    </header>
   )
 }

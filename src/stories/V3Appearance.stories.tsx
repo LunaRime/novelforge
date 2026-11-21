@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react' // eslint-disable-line st
 import { useId, useLayoutEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/Button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../components/ui/Dialog'
-import { SegmentedControl } from '../components/ui/SegmentedControl'
+import { OptionCards } from '../components/ui/ChoiceControls'
 import { useTranslation } from '../hooks/useTranslation'
 import { THEME_ORDER, themeLabel } from '../lib/theme-meta'
 import type { Theme } from '../stores/theme-store'
@@ -95,7 +95,7 @@ function V3Appearance() {
                 <legend>{t('settings.typography')}</legend>
                 <div>
                   <span>{t('settings.fontSize')}</span>
-                  <SegmentedControl items={[...fontSizes]} value={draft.fontSize}
+                  <OptionCards items={[...fontSizes]} value={draft.fontSize}
                     onChange={fontSize => setDraft(previous => ({ ...previous, fontSize }))} />
                 </div>
                 <div>

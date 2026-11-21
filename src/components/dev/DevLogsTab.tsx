@@ -3,7 +3,7 @@ import { RefreshCw } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { EmptyState } from '../ui/EmptyState'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { FilterButtons } from '../ui/ChoiceControls'
 import { Spinner } from '../ui/Spinner'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
@@ -90,7 +90,7 @@ export default function DevLogsTab({ active }: { active: boolean }) {
   return (
     <div className="flex h-full flex-col">
       <div className="flex flex-shrink-0 flex-wrap items-center gap-2 px-6 py-3" style={{ borderBottom: '1px solid var(--color-border)' }}>
-        <SegmentedControl
+        <FilterButtons
           size="sm"
           value={env}
           onChange={(next) => {
@@ -112,7 +112,7 @@ export default function DevLogsTab({ active }: { active: boolean }) {
             <option key={file.name} value={file.name}>{file.name}</option>
           ))}
         </select>
-        <SegmentedControl
+        <FilterButtons
           size="sm"
           value={level}
           onChange={setLevel}

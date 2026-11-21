@@ -155,7 +155,7 @@ describe('AgentMemoryView 加载方式选择器 + 常驻总量（C 档第一轮�
     openProject()
   })
 
-  it('每行三态选择器 + 三档语义 title（选型解释面）', async () => {
+  it('每行三态选择器 + 三档语义悬停提示（选型解释面）', async () => {
     const { container, root } = render(<AgentMemoryView />)
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     expect(container.textContent).toContain('book-state.md')
@@ -163,7 +163,7 @@ describe('AgentMemoryView 加载方式选择器 + 常驻总量（C 档第一轮�
       expect(container.textContent).toContain(label)
     }
     const btns = [...container.querySelectorAll('button')] as HTMLButtonElement[]
-    expect(btns.filter(b => b.title === t('memory.loadModeAutoHint')).length).toBe(FILES.length)
+    expect(btns.filter(b => b.dataset.tooltip === t('memory.loadModeAutoHint')).length).toBe(FILES.length)
     act(() => { root.unmount() })
   })
 

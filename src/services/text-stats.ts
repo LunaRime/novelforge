@@ -6,6 +6,8 @@
  * - 供 Agent 工具 count_characters 与工作流落库 wordCount 共用
  */
 
+import { stripMarkdownUnderline } from '../shared/markdown-underline'
+
 /** 文本统计结果 */
 export interface TextStats {
   /** 总字符数（含空格/换行/标点） */
@@ -39,9 +41,11 @@ export function computeTextStats(text: string): TextStats {
   const nonWhitespaceChars = text.replace(/\s/g, '').length
   const chineseChars = (text.match(/[一-鿿]/g) || []).length
   const englishWords = (text.match(/[a-zA-Z0-9]+/g) || []).length
+  const manuscript = stripMarkdownUnderline(text)
+  const novelEnglishWords = manuscript === text ? englishWords : (manuscript.match(/[a-zA-Z0-9]+/g) || []).length
   const punctuationCount = (text.match(CN_PUNCT_REGEX) || []).length
   const lines = text.split('\n').length
-  const novelWordCount = chineseChars + englishWords
+  const novelWordCount = chineseChars + novelEnglishWords
 
   return {
     totalChars,

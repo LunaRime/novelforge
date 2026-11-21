@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import NovelConfigEditor from './NovelConfigEditor'
 import { useProjectStore } from '../../stores/project-store'
+import { useShortcutStore } from '../../stores/shortcut-store'
 import type { ProjectData } from '../../shared/ipc-channels'
 
 const h = vi.hoisted(() => ({ invoke: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), show: vi.fn(), start: vi.fn(), log: vi.fn(),
@@ -39,6 +40,26 @@ beforeEach(() => {
 })
 afterEach(async () => { if (root) await flush(() => root.unmount()); host?.remove() })
 describe('novel config application view', () => {
+  it('Markdown 文本框使用自定义保存键，并忽略长按产生的重复事件', async () => {
+    const original = useShortcutStore.getState().bindings
+    useShortcutStore.setState({ bindings: { ...original, save: 'Mod+Shift+S' } })
+    try {
+      await mount()
+      await flush(() => h.fields['novelConfig.worldSettingPlaceholder'].onChange!({ target: { value: '# 潮汐' } } as never))
+      const field = host.querySelector<HTMLTextAreaElement>('textarea[placeholder="novelConfig.worldSettingPlaceholder"]')!
+      const press = (shiftKey: boolean, repeat = false) => field.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 's', ctrlKey: true, shiftKey, repeat, bubbles: true, cancelable: true,
+      }))
+      await flush(() => { press(false); press(true, true) })
+      expect(h.invoke).not.toHaveBeenCalled()
+      await flush(() => { press(true) })
+      expect(h.invoke).toHaveBeenCalledTimes(1)
+      expect(h.invoke.mock.calls[0][2].novelConfig.worldSetting).toBe('# 潮汐')
+    } finally {
+      useShortcutStore.setState({ bindings: original })
+    }
+  })
+
   it('false persistence reports failure instead of success', async () => {
     h.invoke.mockResolvedValue({ success: false }); await mount(); await click('action.save')
     expect(h.success).not.toHaveBeenCalled(); expect(h.error).toHaveBeenCalledOnce()

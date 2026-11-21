@@ -13,7 +13,7 @@ import { detectWritingIntent, type WritingIntent } from '../services/agent/writi
 import { buildRoleplaySystemPrompt } from '../services/roleplay-prompt'
 import { useCharacterStore } from './character-store'
 import { skillRegistry } from '../services/agent/skill-registry'
-import { parseSlashCommand, parseMentions, mentionsToToolCalls } from '../services/agent/intent-router'
+import { getAllSlashCommands, parseSlashCommand, parseMentions, mentionsToToolCalls, writingSlashCommands } from '../services/agent/intent-router'
 import { toolRegistry } from '../services/agent/tool-registry'
 import { captureAgentProject, getAgentRuntimePorts, type AgentRuntimePorts } from '../services/agent/runtime-ports'
 import { evaluateApproval, loadApprovalRules, appendApprovalRule, ruleFromApproval, type ApprovalDecision } from '../services/agent/approval'
@@ -305,6 +305,8 @@ const generateHelpText = (): string => {
     t('agent.helpTitle'),
     '',
     t('agent.helpCommands'),
+    ...getAllSlashCommands().filter(cmd => cmd.source === 'builtin_command')
+      .map(cmd => '- `/' + cmd.name + '` — ' + cmd.description),
     '',
     t('agent.helpMention'),
     '',
@@ -322,6 +324,12 @@ const generateHelpText = (): string => {
 
 /** `/技能名` 注入的 token 上限（B 档第一轮）：超出则截断并提示可用 skill 工具加载全文 */
 const SKILL_INJECT_MAX_TOKENS = 2000
+
+// 写作计划、审阅与回顾只读项目资料，不启动工作流或委派任务。
+const WRITING_READ_TOOLS = [
+  'read_project_state', 'read_architecture', 'read_blueprint', 'list_chapters',
+  'read_drafts', 'read_characters', 'search_knowledge', 'query_foreshadowing', 'list_outline',
+]
 
 // 压缩的最小有效降幅（B 档第二轮 B2）与历史预算已迁到用户偏好：见 compaction-prefs
 // （§7.1-C2：默认值与旧常量逐字一致 —— 200 / 4000）
@@ -520,6 +528,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
     // ===== P0-4: / 命令拦截 =====
     const trimmedContent = content.trim()
+    let writingPrompt: string | undefined
     if (trimmedContent.startsWith('/')) {
       const { command, args } = parseSlashCommand(trimmedContent)
       if (command) {
@@ -560,6 +569,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               ),
             }))
             return
+          }
+          case 'plan':
+          case 'review':
+          case 'recap': {
+            // 新增写作命令只为当前回复注入任务和本地阅读权限。
+            const entry = writingSlashCommands[command.name]
+            writingPrompt = t(entry.prompt).replace('{args}', () => args || t('cmd.currentContext'))
+            break
           }
           case 'status': {
             // /status → 直接将 read_project_state 的结果展示
@@ -729,6 +746,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         // W3（批 3）：仅弱档自动召回记忆（强模型自己会 @ / read_memory）
         autoRecall: contextPolicy.autoRecall,
       }, runtime)
+      if (writingPrompt) systemPrompt += `\n\n${writingPrompt}`
 
       // ===== 角色试演注入：会话绑定角色卡时以角色身份回复（OOC 约束在 roleplay prompt 内） =====
       if (currentConv.roleplayCharacter) {
@@ -1330,6 +1348,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           maxMessageBudgetTokens: contextPolicy.historyCeilingTokens,
           // W4（批 3）：仅弱档开启未完成自检（每会话至多一次；强/标准档自己做得到）
           unfinishedCheck: contextPolicy.unfinishedCheck,
+          allowedTools: writingPrompt ? WRITING_READ_TOOLS : undefined,
         },
         agentDeps,
       ).finally(unsubscribeProject)

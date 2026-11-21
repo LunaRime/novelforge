@@ -1,3 +1,4 @@
+import { CreateIcon } from '../../ui/ActionIcons'
 /**
  * VolumeGroup — 分卷管理组（工作台 / 项目结构共用）
  *
@@ -7,7 +8,7 @@
  */
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import {
-  ChevronRight, ChevronDown, BookMarked, Plus, Pencil, Trash2, Layers,
+  ChevronRight, ChevronDown, BookMarked, Pencil, Trash2, Layers,
   CheckCircle2, Circle,
 } from 'lucide-react'
 import MenuRow from '../../ui/MenuRow'
@@ -137,6 +138,7 @@ export default function VolumeGroup({
                 className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
                 style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
                 title={t('volume.autoSplit')}
+                aria-label={t('volume.autoSplit')}
               >
                 <Layers size={12} />
               </button>
@@ -147,8 +149,9 @@ export default function VolumeGroup({
               className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
               style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
               title={t('volume.newVolume')}
+              aria-label={t('volume.newVolume')}
             >
-              <Plus size={12} />
+              <CreateIcon size={12} />
             </button>
           </>
         }
