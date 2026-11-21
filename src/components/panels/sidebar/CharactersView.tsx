@@ -1,14 +1,15 @@
 /**
  * CharactersView — 角色管理列表视图 (v7 戏份分级)
  */
-import { useState, useMemo } from 'react'
-import { Users, RefreshCw, Plus, Sparkles, ChevronDown, ChevronRight, Radar } from 'lucide-react'
+import { useState, useMemo, useId } from 'react'
+import { Users, RefreshCw, Sparkles, ChevronDown, ChevronRight, Radar, Network } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import {
   useCharacterStore, groupByTier,
 } from '../../../stores/character-store'
 import type { CharacterCard } from '../../../stores/character-store'
 import { Button } from '../../ui/Button'
+import { CreateIcon } from '../../ui/ActionIcons'
 import { Input } from '../../ui/Input'
 import { EmptyState } from '../../ui/EmptyState'
 import { confirm } from '../../ui/Confirm'
@@ -26,12 +27,16 @@ import { FilterButtons } from '../../ui/ChoiceControls'
 import CountBadge from '../../ui/CountBadge'
 import { SemanticLabel } from '../../ui/SemanticLabel'
 import { characterRole, characterRoles, characterTier } from '../../editor/character-labels'
+import { readAppearanceChapters } from '../../editor/character-links'
+import MenuRow from '../../ui/MenuRow'
 
 export default function CharactersView({ headerAction }: { headerAction?: React.ReactNode }) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const characters = useCharacterStore(s => s.characters)
   const selectedName = useCharacterStore(s => s.selectedName)
+  const view = useCharacterStore(s => s.view)
+  const setView = useCharacterStore(s => s.setView)
   const load = useCharacterStore(s => s.load)
   const setSelectedName = useCharacterStore(s => s.setSelectedName)
   const addCharacter = useCharacterStore(s => s.addCharacter)
@@ -71,6 +76,7 @@ export default function CharactersView({ headerAction }: { headerAction?: React.
   }
   const [tierFilter, setTierFilter] = useState<number | null>(null)
   const [collapsedTiers, setCollapsedTiers] = useState<Record<number, boolean>>({ 2: false, 3: true })
+  const groupsId = useId()
   // P1-1：名字/别名即时过滤（大小写不敏感；空查询 = 全部）
   const [query, setQuery] = useState('')
   const q = query.trim().toLowerCase()
@@ -146,18 +152,21 @@ export default function CharactersView({ headerAction }: { headerAction?: React.
           {t('charList.title')} ({characters.length})
         </span>
         <div className="flex shrink-0 items-center gap-0.5">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRefresh} title={t('charList.refresh')}>
-            <RefreshCw size={14} strokeWidth={2} />
+          <Button variant="ghost" size="icon" className="size-[32px]" onClick={handleRefresh} title={t('charList.refresh')} aria-label={t('charList.refresh')}>
+            <RefreshCw size={14} strokeWidth={2} aria-hidden="true" />
           </Button>
           {/* P2-1：出场统计扫描（存量项目生命周期字段回填） */}
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => void handleScan()} disabled={scanning} title={t('charList.scanAppearances')}>
-            <Radar size={14} strokeWidth={2} />
+          <Button variant="ghost" size="icon" className="size-[32px]" onClick={() => void handleScan()} disabled={scanning} title={t('charList.scanAppearances')} aria-label={t('charList.scanAppearances')}>
+            <Radar size={14} strokeWidth={2} aria-hidden="true" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleArchive} disabled={archiving} title={t('character.archiveBtnTitle')}>
-            <Sparkles size={14} strokeWidth={2} />
+          <Button variant="ghost" size="icon" className="size-[32px]" onClick={handleArchive} disabled={archiving} title={t('character.archiveBtnTitle')} aria-label={t('character.archiveBtnTitle')}>
+            <Sparkles size={14} strokeWidth={2} aria-hidden="true" />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={addCharacter} title={t('charList.newChar')}>
-            <Plus size={14} strokeWidth={2} />
+          <Button variant="ghost" size="icon" className="size-[32px]" onClick={() => {
+            addCharacter()
+            openBuiltinEditor('character-editor', t('character.viewProfile'), 'character')
+          }} title={t('charList.newChar')} aria-label={t('charList.newChar')}>
+            <CreateIcon size={14} />
           </Button>
           {headerAction}
         </div>
@@ -178,60 +187,72 @@ export default function CharactersView({ headerAction }: { headerAction?: React.
         }))}
       />
 
-      {/* P1-1：名字/别名搜索框 */}
-      <div className="px-2 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
-        {/* 侧栏内的紧凑尺寸：h-7/text-xs → h-6/text-micro。其余外观与交互（描边、底色、
-            focus 环、hover 转描边、禁用态）全走 ui/Input，不再逐个手写 */}
-        <Input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('charList.searchPlaceholder')}
-          className="h-6 px-2 text-micro"
+      <div className="shrink-0 border-b border-[var(--color-border)] px-1 pb-1.5 pt-1">
+        <MenuRow
+          icon={<Network size={14} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />}
+          title={t('character.viewGraph')}
+          titleHint={t('character.viewRelations')}
+          swap="nav"
+          active={view === 'graph'}
+          onPrimary={() => {
+            setView('graph')
+            openBuiltinEditor('character-editor', t('character.viewProfile'), 'character')
+          }}
         />
+        <div className="px-1 pt-1">
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('charList.searchPlaceholder')}
+            aria-label={t('charList.searchPlaceholder')}
+            className="h-8 px-2"
+          />
+        </div>
       </div>
 
       {/* 角色列表 — 按 tier 分组 */}
       <div className="flex-1 overflow-y-auto p-1">
         {characters.length === 0 ? (
           <EmptyState message={t('character.empty')} size="xs" className="text-center" />
+        ) : !Object.values(display).some(cards => cards.length > 0) ? (
+          <EmptyState message={t('charList.noMatches')} size="xs" className="text-center" />
         ) : (
           [1, 2, 3].map(tier => {
             const chars = display[tier] || []
             if (chars.length === 0) return null
             const collapsed = collapsedTiers[tier] ?? false
+            const groupId = `${groupsId}-${tier}`
             return (
               <div key={tier}>
-                {/* tier 分组头 — 2026-09-28 批 0：头行改「行片」（`.menu-chip`，32px 高），
-                    悬停底色由片承担（`menu-chip:where(button):hover`），原 `hover:bg-*`/`rounded` 随之删除。
-                    去 `w-full`：片是**块级** flex 容器本已铺满，而 `width:100%` 会与片自带的
-                    `margin: 2px 4px` 叠加，左右各溢出 4px。chevron 保持常驻 ›/⌄（头行只有折叠
-                    一个行为，箭头即状态指示，不做悬停置换）。 */}
-                <button
-                  className="menu-chip flex items-center gap-1 px-2 text-micro font-medium text-[var(--color-text-muted)] cursor-pointer"
-                  onClick={(e) => { e.stopPropagation(); setCollapsedTiers(prev => ({ ...prev, [tier]: !collapsed })) }}
-                  type="button"
-                >
-                  {collapsed
-                    ? <ChevronRight size={10} />
-                    : <ChevronDown size={10} />
-                  }
-                  <SemanticLabel name={characterTier(tier).icon}>{t(characterTier(tier).label)}</SemanticLabel>
-                  <CountBadge value={chars.length} className="ml-auto" />
-                </button>
-                {!collapsed && chars.map(c => (
-                  <CharItem
-                    key={c.name}
-                    char={c}
-                    selected={selectedName === c.name}
-                    onClick={() => {
-                      // 角色 Tab 可能被手动关闭——点击角色时确保重新打开并激活
-                      // （openFile 已存在则仅激活；不存在则新开 'character-editor' Tab）
-                      openBuiltinEditor('character-editor', t('character.viewProfile'), 'character')
-                      setSelectedName(c.name)
-                    }}
-                  />
-                ))}
+                {/* 网格伸展将原生按钮铺满行宽，行片两侧各 4px 外边距与搜索框边缘对齐。 */}
+                <div className="grid">
+                  <button
+                    className="menu-chip gap-1.5 border border-[var(--color-border)] bg-[var(--color-panel)] px-2 text-xs font-medium text-[var(--color-text-secondary)] cursor-pointer"
+                    onClick={() => setCollapsedTiers(prev => ({ ...prev, [tier]: !collapsed }))}
+                    aria-expanded={!collapsed}
+                    aria-controls={groupId}
+                    type="button"
+                  >
+                    {collapsed ? <ChevronRight size={12} aria-hidden="true" /> : <ChevronDown size={12} aria-hidden="true" />}
+                    <SemanticLabel name={characterTier(tier).icon}>{t(characterTier(tier).label)}</SemanticLabel>
+                    <CountBadge value={chars.length} className="ml-auto" />
+                  </button>
+                </div>
+                <div id={groupId} hidden={collapsed}>
+                  {!collapsed && chars.map(c => (
+                    <CharItem
+                      key={c.name}
+                      char={c}
+                      selected={view !== 'graph' && selectedName === c.name}
+                      onClick={() => {
+                        setSelectedName(c.name)
+                        setView('edit')
+                        openBuiltinEditor('character-editor', t('character.viewProfile'), 'character')
+                      }}
+                    />
+                  ))}
+                </div>
               </div>
             )
           })
@@ -250,12 +271,7 @@ function CharItem({ char: c, selected, onClick }: {
   let tags: string[] = []
   try { tags = JSON.parse(c.tags || '[]') } catch { tags = [] }
 
-  // 解析出场章节（Array.isArray 守卫：裸 JSON 文本框可存 "1,5" 字符串——此前 join 抛 TypeError 崩溃）
-  let chaps: number[] = []
-  try {
-    const parsed = JSON.parse(c.appearChapters || '[]')
-    if (Array.isArray(parsed)) chaps = parsed as number[]
-  } catch { chaps = [] }
+  const chaps = readAppearanceChapters(c.appearChapters)
 
   const chapsDisplay = chaps.length <= 3
     ? chaps.join(',')

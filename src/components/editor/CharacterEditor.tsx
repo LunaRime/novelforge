@@ -2,8 +2,8 @@ import { SemanticLabel } from '../ui/SemanticLabel'
 import { characterRoles, characterTier } from './character-labels'
 import { FeatureSplit } from '../ui/FeatureSplit'
 import MenuRow from '../ui/MenuRow'
-import { useState, useRef, useMemo, useEffect } from 'react'
-import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles, GitMerge, MoreHorizontal } from 'lucide-react'
+import { useState, useRef, useMemo, useEffect, useId } from 'react'
+import { Save, Trash2, Users, Network, Link2, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles, GitMerge, MoreHorizontal, Activity, BookOpen, ArrowRight } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { confirm } from '../ui/Confirm'
@@ -12,14 +12,19 @@ import { renderLog } from '../../services/render-logger'
 import {
   useCharacterStore,
   EMPTY_STATE,
+  type CharacterCard,
   type CharacterCurrentState,
+  type CharacterView,
 } from '../../stores/character-store'
 import { findPairsForCharacter, type DuplicatePair, type DuplicateReason } from '../../services/character-duplicates'
 import { parseAliases } from '../../services/character-normalize'
 import RelationshipGraph from './RelationshipGraph'
 import CharacterBacklinks from './CharacterBacklinks'
+import { CharacterChapterLink } from './CharacterChapterLink'
+import { readAppearanceChapters, relationLabels, useCharacterChapterDrafts } from './character-links'
 import { EmptyState as BaseEmptyState } from '../ui/EmptyState'
 import { Button } from '../ui/Button'
+import { CreateIcon } from '../ui/ActionIcons'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
@@ -36,9 +41,7 @@ import { runCharacterArchive } from '../../services/workflows/character-archive-
 import type { TextKey } from '../../shared/locale'
 import { captureCharacterSource, CharacterEditCancelled, isCharacterSourceCurrent, refreshCharacterMergeProjections } from '../../services/characters/character-edits-adapter'
 import { listCharacterTemplates, readCharacterTemplate, saveCharacterTemplate } from '../../services/characters/character-template-adapter'
-
-/** 四个并列视图（视图条上的分段值） */
-type ViewMode = 'edit' | 'state' | 'graph' | 'backlinks'
+import './character-workspace.css'
 
 /**
  * 角色卡编辑器。角色侧栏可见时使用其名单，其他布局提供就地选择。
@@ -56,7 +59,8 @@ export default function CharacterEditor() {
   const deleteCharacter = useCharacterStore(s => s.deleteCharacter)
   const saveAll = useCharacterStore(s => s.saveAll)
   const dirty = useCharacterStore(s => s.dirty)
-  const [viewMode, setViewMode] = useState<ViewMode>('edit')
+  const viewMode = useCharacterStore(s => s.view)
+  const setViewMode = useCharacterStore(s => s.setView)
   const [listFor, setListFor] = useState<string | null>()
 
   /** 「更多」菜单开关（低频操作：生成档案 / 试演 / 模板 / 删除） */
@@ -391,7 +395,7 @@ export default function CharacterEditor() {
                 </PopoverSurface>
               )}
             </div>
-          ) : viewMode !== 'graph' ? (
+          ) : viewMode !== 'graph' && !sidebarOwnsRoster ? (
             /* 无选中角色时没有「卡」可编辑，只剩图谱值得看（点节点即回到档案） */
             <Button variant="outline" size="sm" onClick={() => { setListFor(undefined); setViewMode('graph') }} title={t('character.viewRelations')}>
               <Network size={12} /> {t('character.viewGraph')}
@@ -408,7 +412,7 @@ export default function CharacterEditor() {
           className="flex items-center px-3 py-1 flex-shrink-0"
           style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-editor-bg)' }}
         >
-          <ViewTabs<ViewMode>
+          <ViewTabs<CharacterView>
             size="sm"
             value={viewMode}
             onChange={setViewMode}
@@ -422,8 +426,11 @@ export default function CharacterEditor() {
         </div>
       )}
 
-      <FeatureSplit detailOpen={(Boolean(selectedCard) || viewMode === 'graph') && listFor !== selectedName}
-        onBack={() => setListFor(selectedName)} list={sidebarOwnsRoster ? null : (
+      <FeatureSplit detailOpen={viewMode === 'graph' || (Boolean(selectedCard) && listFor !== selectedName)}
+        onBack={() => {
+          setListFor(selectedName)
+          if (viewMode === 'graph') setViewMode('edit')
+        }} list={sidebarOwnsRoster ? null : (
           characters.length === 0
             ? <BaseEmptyState icon={<Users size={24} />} message={t('character.selectOrCreate')} />
             : characters.map(character => (
@@ -441,10 +448,16 @@ export default function CharacterEditor() {
         {viewMode === 'graph' ? (
           <RelationshipGraph
             characters={characters}
-            onSelect={(name) => { setViewMode('edit'); useCharacterStore.getState().setSelectedName(name) }}
+            selectedName={selectedName}
+            onSelect={(name) => {
+              setListFor(undefined)
+              setViewMode('edit')
+              useCharacterStore.getState().setSelectedName(name)
+            }}
           />
         ) : viewMode === 'backlinks' && selectedCard ? (
-          <CharacterBacklinks character={selectedCard} allCharacters={characters} />
+          <CharacterBacklinks character={selectedCard} allCharacters={characters}
+            onSelect={name => useCharacterStore.getState().setSelectedName(name)} />
         ) : !selectedCard ? (
           <BaseEmptyState
             icon={<Users size={36} />}
@@ -599,10 +612,12 @@ export default function CharacterEditor() {
 
               {/* === 生命周期 + 角色合并（P1-6） === */}
               <LifecycleMergeSection
+                key={selectedCard.name}
                 char={selectedCard}
                 characters={characters}
                 t={t}
                 guardSelection={guardSelection}
+                onOpenBacklinks={() => setViewMode('backlinks')}
               />
 
               {/* tier 3 提示 */}
@@ -629,10 +644,10 @@ export default function CharacterEditor() {
  * 滚动时没有任何落点（此前唯一的分区手法是生命周期区前的一条 `border-t`）。
  * 分区只加给「多字段成组」的段落，单个字段（备注）不配分区标题。
  */
-function SectionHeader({ title }: { title: string }) {
+function SectionHeader({ title, id }: { title: string; id?: string }) {
   return (
     <div className="flex items-center gap-2 pt-2">
-      <span className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{title}</span>
+      <h3 id={id} className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{title}</h3>
       <div className="flex-1" style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
     </div>
   )
@@ -653,12 +668,21 @@ const STATUS_KEYS: Record<string, TextKey> = {
   dead: 'character.statusDead',
 }
 
-function LifecycleMergeSection({ char, characters, t, guardSelection }: {
-  char: { name: string; status?: string; appearCount?: number; firstChapter?: number; lastChapter?: number }
+function LifecycleMergeSection({ char, characters, t, guardSelection, onOpenBacklinks }: {
+  char: CharacterCard
   characters: Array<{ name: string; aliases?: unknown }>
   t: ReturnType<typeof useTranslation>['t']
   guardSelection: () => () => boolean
+  onOpenBacklinks: () => void
 }) {
+  const statusId = useId()
+  const drafts = useCharacterChapterDrafts()
+  const chapters = useMemo(() => readAppearanceChapters(char.appearChapters), [char.appearChapters])
+  const appearCount = chapters.length || char.appearCount || 0
+  const firstChapter = chapters[0] ?? char.firstChapter ?? 0
+  const lastChapter = chapters.at(-1) ?? char.lastChapter ?? 0
+  const status = char.status && Object.hasOwn(STATUS_KEYS, char.status) ? char.status : 'active'
+  const mergeCandidates = characters.filter(candidate => candidate.name && candidate.name !== char.name)
   const [merging, setMerging] = useState(false)
   const [mergeTarget, setMergeTarget] = useState('')
   const mergePending = useRef(false)
@@ -718,104 +742,105 @@ function LifecycleMergeSection({ char, characters, t, guardSelection }: {
   const otherName = (pair: DuplicatePair): string => pair.a === char.name ? pair.b : pair.a
 
   return (
-    <div>
-      {/* 分区标题（此前只有一条 border-t，看不出这一段是「生命周期 + 合并」） */}
-      <SectionHeader title={t('character.lifecycleSection')} />
-      {/* 生命周期统计 + 状态。`mt-3` 与其他分区的 `space-y-3` 对齐 ——
-          少了它，这个分区的标题会紧贴字段（截图实测：比其他分区紧 12px） */}
-      <div className="grid gap-3 mt-3 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
-        <div>
-          <Label>{t('character.status')}</Label>
+    <section className="space-y-3" aria-labelledby={`${statusId}-section`}>
+      <SectionHeader id={`${statusId}-section`} title={t('character.lifecycleSection')} />
+      <div className="nf-character-lifecycle">
+        <div className="nf-character-card">
+          <Label htmlFor={statusId} className="nf-character-card-title">
+            <Activity size={14} aria-hidden="true" /> {t('character.status')}
+          </Label>
           <Select
-            value={char.status || 'active'}
+            value={status}
             onValueChange={(v) => useCharacterStore.getState().updateField(char.name, 'status', v)}
           >
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectTrigger id={statusId} aria-describedby={`${statusId}-hint`} className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
               {Object.entries(STATUS_KEYS).map(([k, key]) => (
-                <SelectItem key={k} value={k}>{t(key)}</SelectItem>
+                <SelectItem key={k} value={k}>
+                  <span className="nf-character-status"><span data-status={k} aria-hidden="true" />{t(key)}</span>
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
-          <div className="text-2xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            {t('character.statusHint')}
-          </div>
+          <p id={`${statusId}-hint`} className="nf-character-note">{t('character.statusHint')}</p>
         </div>
-        <div>
-          {/* ⚠️ 必须有 Label：与左列「Label + 控件」结构对等，两列才会基线对齐——
-              此前用 `pt-1` 硬凑（2026-09-28 走查：统计文字与状态下拉框不对齐） */}
-          <Label>{t('character.appearStats')}</Label>
-          <div className="text-xs space-y-1" style={{ color: 'var(--color-text-secondary)' }}>
-            <div>{t('character.appearCount')}: <span className="font-medium">{char.appearCount ?? 0}</span></div>
-            <div>
-              {t('character.firstChapter')}: <span className="font-medium">{char.firstChapter ?? 0}</span>
-              {' · '}
-              {t('character.lastChapter')}: <span className="font-medium">{char.lastChapter ?? 0}</span>
-            </div>
-          </div>
+        <div className="nf-character-card">
+          <h4 className="nf-character-card-title"><BookOpen size={14} aria-hidden="true" /> {t('character.appearStats')}</h4>
+          {appearCount > 0 || firstChapter > 0 || lastChapter > 0 ? (
+            <>
+              <dl className="nf-character-appearance-stats">
+                <div><dt>{t('character.appearCount')}</dt><dd>{appearCount > 0 ? appearCount : '—'}</dd></div>
+                <div><dt>{t('character.firstChapter')}</dt><dd>{firstChapter > 0 ? <CharacterChapterLink chapter={firstChapter} drafts={drafts} /> : '—'}</dd></div>
+                <div><dt>{t('character.lastChapter')}</dt><dd>{lastChapter > 0 ? <CharacterChapterLink chapter={lastChapter} drafts={drafts} /> : '—'}</dd></div>
+              </dl>
+              {chapters.length > 0 && (
+                <Button variant="ghost" size="sm" className="mt-1 self-start" onClick={onOpenBacklinks} type="button">
+                  {t('character.viewAppearanceChapters')} <ArrowRight size={12} aria-hidden="true" />
+                </Button>
+              )}
+            </>
+          ) : <p className="nf-character-note">{t('character.backlinks.noChapters')}</p>}
         </div>
       </div>
 
-      {/* 疑似重复 */}
-      <div className="mt-3 space-y-1.5">
-        <div className="text-micro font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          {t('character.duplicateTitle')}
-        </div>
+      <div className="nf-character-card">
+        <h4 className="nf-character-card-title">
+          <GitMerge size={14} aria-hidden="true" /> {t('character.mergeTitle')}
+        </h4>
         {duplicates.length === 0 ? (
-          <div className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
-            {t('character.noDuplicates')}
-          </div>
+          <p className="nf-character-note">{t('character.noDuplicates')}</p>
         ) : (
-          duplicates.map(pair => {
-            const other = otherName(pair)
-            return (
-              <div key={pair.a + pair.b} className="flex items-center gap-2 text-micro">
-                <span className="px-1.5 py-0.5 rounded truncate max-w-[9rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}>
-                  {other}
-                </span>
-                <span className="opacity-60 flex-shrink-0">{t(DUP_REASON_KEYS[pair.reason])}</span>
-                <div className="ml-auto flex gap-1 flex-shrink-0">
-                  <Button variant="outline" size="sm" disabled={merging} onClick={() => void doMerge(char.name, other)} title={t('character.mergeIntoCurrent').replace('{name}', other)}>
-                    <GitMerge size={11} /> {t('character.mergeIntoCurrent').replace('{name}', other)}
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={merging} onClick={() => void doMerge(other, char.name)} title={t('character.mergeIntoOther').replace('{name}', other)}>
-                    → {other}
-                  </Button>
-                </div>
-              </div>
-            )
-          })
+          <>
+            <p className="nf-character-note">{t('character.duplicateTitle')}</p>
+            <ul className="nf-character-merge-list">
+              {duplicates.map(pair => {
+                const other = otherName(pair)
+                return (
+                  <li key={other}>
+                    <div className="min-w-0">
+                      <div className="truncate text-xs font-medium" title={other}>{other}</div>
+                      <div className="nf-character-note">{t(DUP_REASON_KEYS[pair.reason])}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Button type="button" variant="outline" size="sm" disabled={merging} onClick={() => void doMerge(char.name, other)}>
+                        {t('character.mergeIntoCurrent')}
+                      </Button>
+                      <Button type="button" variant="outline" size="sm" className="min-w-0 max-w-full" disabled={merging}
+                        onClick={() => void doMerge(other, char.name)} title={t('character.mergeIntoOther').replace('{name}', other)}>
+                        <span className="truncate">{t('character.mergeIntoOther').replace('{name}', other)}</span>
+                      </Button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </>
         )}
 
-        {/* 手动合并到任意角色 */}
-        <div className="flex items-center gap-2 pt-1">
-          <Select value={mergeTarget} onValueChange={setMergeTarget}>
-            <SelectTrigger className="h-7 text-micro w-40">
-              <SelectValue placeholder={t('character.mergeToPlaceholder')} />
-            </SelectTrigger>
-            <SelectContent>
-              {characters
-                .filter(c => c.name !== char.name)
-                .map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
-          <Button variant="outline" size="sm" disabled={merging || !mergeTarget} onClick={() => void doMerge(mergeTarget, char.name)}>
-            <GitMerge size={11} /> {t('character.mergeBtn')}
-          </Button>
-        </div>
+        {mergeCandidates.length > 0 && (
+          <div className="nf-character-merge-actions">
+            <Select value={mergeTarget} onValueChange={setMergeTarget} disabled={merging}>
+              <SelectTrigger className="min-w-0 max-w-full flex-1" aria-label={t('character.mergeToPlaceholder')}>
+                <SelectValue placeholder={t('character.mergeToPlaceholder')} />
+              </SelectTrigger>
+              <SelectContent>
+                {mergeCandidates.map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Button type="button" variant="outline" size="lg" disabled={merging || !mergeTarget} onClick={() => void doMerge(mergeTarget, char.name)}>
+              <GitMerge size={14} aria-hidden="true" /> {t('character.mergeBtn')}
+            </Button>
+          </div>
+        )}
       </div>
-    </div>
+    </section>
   )
 }
 
 // ===== 结构化关系编辑器 =====
 
 function getRelTypeMap(t: ReturnType<typeof useTranslation>['t']): Record<string, string> {
-  return {
-    ally: t('character.relType.ally'), enemy: t('character.relType.enemy'), family: t('character.relType.family'),
-    master_student: t('character.relType.masterStudent'), lover: t('character.relType.lover'), rival: t('character.relType.rival'),
-    neutral: t('character.relType.neutral'), other: t('character.relType.other'),
-  }
+  return Object.fromEntries(Object.entries(relationLabels).map(([type, key]) => [type, t(key)]))
 }
 
 
@@ -923,7 +948,7 @@ function StructuredRelations({
             className="w-16 text-xs"
           />
           <button onClick={addRelation} className="p-1 rounded bg-[var(--color-accent)] text-white cursor-pointer" type="button">
-            <Plus size={10} />
+            <CreateIcon size={12} />
           </button>
           <button onClick={() => setAdding(false)} className="p-1 text-[var(--color-text-muted)] cursor-pointer bg-transparent border-0" type="button">
             <X size={10} />
@@ -940,7 +965,7 @@ function StructuredRelations({
           title={available.length === 0 ? t('character.noTarget') : undefined}
           onClick={() => setAdding(true)}
         >
-          <Plus size={11} /> {t('character.addRelation')}
+          <CreateIcon size={14} /> {t('character.addRelation')}
         </Button>
       )}
     </div>

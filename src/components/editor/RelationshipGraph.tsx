@@ -1,31 +1,21 @@
-/**
- * RelationshipGraph — 交互式角色关系图谱 (v7 Obsidian 风格)
- *
- * 特性：SVG + React 渲染、拖拽/点击/缩放/筛选、Tier 分级布局、关系类型颜色编码
- */
-import { useState, useRef, useMemo, useCallback } from 'react'
-import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
+import { useId, useMemo, useRef, useState, type PointerEvent } from 'react'
+import { ArrowUpRight, ChevronRight, Maximize2, Network, Search, ZoomIn, ZoomOut } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
-import type { CharacterCard } from '../../stores/character-store'
+import { parseAliases } from '../../services/character-normalize'
+import { groupByTier, type CharacterCard } from '../../stores/character-store'
+import { Button } from '../ui/Button'
+import { FilterButtons } from '../ui/ChoiceControls'
+import CountBadge from '../ui/CountBadge'
+import { EmptyState } from '../ui/EmptyState'
+import { Input } from '../ui/Input'
+import { SemanticLabel } from '../ui/SemanticLabel'
+import { characterRole, characterRoles, characterTier } from './character-labels'
+import { readCharacterRelations, relationLabels } from './character-links'
 
-// ===== 类型 =====
+type Point = { x: number; y: number }
+type GraphNode = Point & { card: CharacterCard; radius: number }
+type GraphEdge = { source: string; target: string; type: string; label: string; id: string }
 
-interface GraphNode {
-  name: string
-  role: string
-  tier: number
-  x: number
-  y: number
-}
-
-interface GraphEdge {
-  from: string
-  to: string
-  type: string
-  label: string
-}
-
-// 关系类型颜色 — 全部走主题 CSS 变量（AGENTS.md 约束：禁止硬编码颜色，四主题自适应）
 const RELATION_COLORS: Record<string, string> = {
   ally: 'var(--color-success)',
   enemy: 'var(--color-error)',
@@ -37,315 +27,305 @@ const RELATION_COLORS: Record<string, string> = {
   other: 'var(--color-text-secondary)',
 }
 
-const ROLE_SIZES: Record<string, number> = {
-  protagonist: 28,
-  antagonist: 26,
-  supporting: 20,
-  minor: 16,
-}
+const ORIGIN = { x: 0, y: 0 }
+const MIN_ZOOM = 0.5
+const MAX_ZOOM = 3.5
 
-// ===== 关系解析 =====
-
-function parseRelations(characters: CharacterCard[]): GraphEdge[] {
-  const edges: GraphEdge[] = []
-  const allNames = new Set(characters.map(c => c.name))
-  // 边去重索引（P3 修复：此前 edges.some 线性扫描 O(E²)，大关系网卡顿）
-  const seenEdges = new Set<string>()
-
-  const pushEdge = (from: string, to: string, type: string, label: string) => {
-    const key = [from, to].sort().join('::')
-    if (seenEdges.has(key)) return
-    seenEdges.add(key)
-    edges.push({ from, to, type, label })
-  }
-
-  for (const char of characters) {
-    // 优先解析结构化 relations
-    try {
-      const rels = JSON.parse(char.relations || '[]') as Array<{
-        target: string; type: string; label: string
-      }>
-      for (const r of rels) {
-        if (r.target && allNames.has(r.target)) {
-          // 去重：避免双向关系重复绘制
-          pushEdge(char.name, r.target, r.type || 'other', r.label || '')
-        }
-      }
-      if (rels.length > 0) continue
-    } catch { /* fallback */ }
-
-    // 回退：解析旧版文本 relationships
-    if (!char.relationships) continue
-    try {
-      const parsed = JSON.parse(char.relationships)
-      if (Array.isArray(parsed)) {
-        for (const rel of parsed) {
-          const target = rel.name || rel.target
-          if (target && allNames.has(target)) {
-            pushEdge(char.name, target, rel.type || 'other', rel.relation || rel.label || '')
-          }
-        }
-        continue
-      }
-    } catch { /* text fallback */ }
-
-    const lines = char.relationships.split(/[,;，；\n]/).filter(Boolean)
-    for (const line of lines) {
-      const match = line.match(/(.+?)[：:—-]\s*(.+)/)
-      if (match && allNames.has(match[1].trim())) {
-        pushEdge(char.name, match[1].trim(), 'other', match[2].trim())
-      }
+function buildEdges(characters: CharacterCard[]): GraphEdge[] {
+  const names = new Set(characters.map(card => card.name))
+  const edges = new Map<string, GraphEdge>()
+  for (const card of characters) {
+    for (const relation of readCharacterRelations(card)) {
+      if (relation.target === card.name || !names.has(relation.target)) continue
+      // 双向记录共用一条连线，具体方向与说明仍可在反向链接中查阅。
+      const id = JSON.stringify([card.name, relation.target].sort())
+      if (!edges.has(id)) edges.set(id, { ...relation, source: card.name, id })
     }
   }
-  return edges
+  return [...edges.values()]
 }
 
-// ===== 布局引擎 =====
-
-function computeLayout(characters: CharacterCard[], width: number, height: number): GraphNode[] {
-  const cx = width / 2
-  const cy = height / 2
-
-  // Tier 1 居中，Tier 2 中层环，Tier 3 外层环
-  const tierConfig: Record<number, { radius: number }> = {
-    1: { radius: Math.min(width, height) * 0.12 },
-    2: { radius: Math.min(width, height) * 0.30 },
-    3: { radius: Math.min(width, height) * 0.44 },
-  }
-
-  const grouped: Record<number, CharacterCard[]> = { 1: [], 2: [], 3: [] }
-  for (const c of characters) {
-    // 非法 tier 值归一化到 1-3（此前 tier>=4 静默丢弃，图例/边仍引用，节点消失无日志）
-    const t = (c.tier >= 1 && c.tier <= 3) ? (c.tier || 2) : 2
-    if (c.tier !== undefined && (c.tier < 1 || c.tier > 3)) {
-      console.warn(`[RelationshipGraph] 角色「${c.name}」tier=${c.tier} 非法，已按 2 展示（数据未修正，保存时生效）`)
-    }
-    grouped[t]?.push(c)
-  }
-
+function layoutNodes(characters: CharacterCard[]) {
+  const groups = groupByTier(characters)
   const nodes: GraphNode[] = []
+  let previousRing = 0
   for (const tier of [1, 2, 3]) {
-    const chars = grouped[tier] || []
-    const r = tierConfig[tier].radius
-    chars.forEach((c, i) => {
-      const angle = (i / Math.max(chars.length, 1)) * Math.PI * 2 - Math.PI / 2
-      nodes.push({
-        name: c.name,
-        role: c.role,
-        tier: c.tier || 2,
-        x: cx + r * Math.cos(angle),
-        y: cy + r * Math.sin(angle),
-      })
+    const cards = groups[tier]
+    if (cards.length === 0) continue
+    // 较大的分组扩展环半径，为姓名和节点留出空间。
+    const ring = nodes.length === 0 && cards.length === 1
+      ? 0
+      : Math.max(previousRing + 118, cards.length * 105 / (2 * Math.PI))
+    previousRing = ring
+    const radius = tier === 1 ? 27 : tier === 2 ? 23 : 19
+    cards.forEach((card, index) => {
+      const theta = index * Math.PI * 2 / cards.length - Math.PI / 2 + (tier === 2 ? Math.PI / cards.length : 0)
+      nodes.push({ card, radius, x: Math.cos(theta) * ring, y: Math.sin(theta) * ring })
     })
   }
-  return nodes
+  let width = 500
+  let height = 340
+  for (const node of nodes) {
+    width = Math.max(width, 2 * Math.abs(node.x) + 160)
+    height = Math.max(height, 2 * Math.abs(node.y) + 160)
+  }
+  return { nodes, width, height }
 }
 
-// ===== 组件 =====
+function abbreviate(text: string, length: number) {
+  const characters = Array.from(text)
+  return characters.length > length ? characters.slice(0, length).join('') + '…' : text
+}
 
 interface Props {
   characters: CharacterCard[]
-  onSelect?: (name: string) => void
+  selectedName: string | null
+  onSelect: (name: string) => void
 }
 
-export default function RelationshipGraph({ characters, onSelect }: Props) {
+interface Drag {
+  id: number
+  name?: string
+  moved: boolean
+  start: Point
+  origin: Point
+  scale: number
+}
+
+export default function RelationshipGraph({ characters, selectedName, onSelect }: Props) {
   const { t } = useTranslation()
-  const svgRef = useRef<SVGSVGElement>(null)
-  const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 800, h: 600 })
-  const [dragging, setDragging] = useState<{ name: string; sx: number; sy: number } | null>(null)
-  const [tierFilter, setTierFilter] = useState<number | null>(null)
-  const edges = useMemo(() => parseRelations(characters), [characters])
+  const [tier, setTier] = useState(0)
+  const [search, setSearch] = useState('')
+  const [focusedName, setFocusedName] = useState(selectedName)
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState<Point>(ORIGIN)
+  const [offsets, setOffsets] = useState(() => new Map<string, Point>())
+  const gridId = useId()
+  const drag = useRef<Drag | null>(null)
+  const edges = useMemo(() => buildEdges(characters), [characters])
+  const tiers = useMemo(() => groupByTier(characters), [characters])
+  const tierCharacters = tier === 0 ? characters : tiers[tier]
+  const query = search.trim().toLowerCase()
+  const matches = useMemo(() => new Set(tierCharacters
+    .filter(card => [card.name, ...parseAliases(card.aliases)].some(value => value.toLowerCase().includes(query)))
+    .map(card => card.name)), [query, tierCharacters])
+  const displayed = useMemo(() => {
+    if (!query) return tierCharacters
+    const neighbors = new Set(matches)
+    for (const edge of edges) {
+      if (matches.has(edge.source)) neighbors.add(edge.target)
+      if (matches.has(edge.target)) neighbors.add(edge.source)
+    }
+    return tierCharacters.filter(card => neighbors.has(card.name))
+  }, [query, tierCharacters, matches, edges])
+  const layout = useMemo(() => layoutNodes(displayed), [displayed])
+  const nodes = new Map(layout.nodes.map(node => {
+    const offset = offsets.get(node.card.name) ?? ORIGIN
+    return [node.card.name, { ...node, x: node.x + offset.x, y: node.y + offset.y }]
+  }))
+  const visibleEdges = edges.filter(edge => nodes.has(edge.source) && nodes.has(edge.target))
+  const types = [...new Set(visibleEdges.map(edge => edge.type))]
+  const focused = focusedName === null ? undefined : nodes.get(focusedName)
+  const focusedEdges = focused ? visibleEdges.filter(edge => edge.source === focusedName || edge.target === focusedName) : []
+  const neighbors = new Set(focusedEdges.map(edge => edge.source === focusedName ? edge.target : edge.source))
+  const width = layout.width / zoom
+  const height = layout.height / zoom
+  const left = -width / 2 - pan.x
+  const top = -height / 2 - pan.y
 
-  // 基础布局（memo，避免 effect 中 setState）
-  const baseLayout = useMemo(
-    () => computeLayout(characters, viewBox.w, viewBox.h),
-    [characters, viewBox.w, viewBox.h]
-  )
-  // 可拖拽覆盖的节点位置
-  const [dragOffsets, setDragOffsets] = useState<Record<string, { dx: number; dy: number }>>({})
-  const visibleNodes = useMemo(() => {
-    const filtered = tierFilter ? baseLayout.filter(n => n.tier === tierFilter) : baseLayout
-    return filtered.map(n => {
-      const off = dragOffsets[n.name]
-      return off ? { ...n, x: n.x + off.dx, y: n.y + off.dy } : n
-    })
-  }, [baseLayout, tierFilter, dragOffsets])
-
-  const visibleEdges = useMemo(() => tierFilter
-    ? edges.filter(e => visibleNodes.some(n => n.name === e.from) && visibleNodes.some(n => n.name === e.to))
-    : edges, [edges, tierFilter, visibleNodes])
-
-  // 缩放
-  const zoom = (factor: number) => {
-    setViewBox(vb => {
-      const newW = Math.max(300, Math.min(2000, vb.w * factor))
-      const newH = Math.max(200, Math.min(1500, vb.h * factor))
-      return { ...vb, w: newW, h: newH }
-    })
+  const resetViewport = () => {
+    setZoom(1)
+    setPan(ORIGIN)
+    setOffsets(new Map())
   }
 
-  // 重置视图
-  const resetView = () => {
-    setViewBox({ x: 0, y: 0, w: 800, h: 600 })
-    setDragOffsets({})
+  const handlePointerDown = (event: PointerEvent<SVGSVGElement>) => {
+    if (event.button !== 0 || !event.isPrimary) return
+    const bounds = event.currentTarget.getBoundingClientRect()
+    if (bounds.width === 0 || bounds.height === 0) return
+    const name = (event.target as Element).closest<SVGGElement>('[data-graph-node]')?.dataset.graphNode
+    drag.current = {
+      id: event.pointerId,
+      name,
+      moved: false,
+      start: { x: event.clientX, y: event.clientY },
+      origin: name === undefined ? pan : offsets.get(name) ?? ORIGIN,
+      scale: Math.max(width / bounds.width, height / bounds.height),
+    }
+    event.currentTarget.setPointerCapture(event.pointerId)
   }
 
-  // 拖拽节点（#34 块 D：dragMovedRef 记录是否发生实际位移——拖拽后浏览器仍派发
-  // click，位移超过阈值则抑制随后的选中，防止"摆节点被踢回编辑页"）
-  const dragMovedRef = useRef(false)
-
-  const handleMouseDown = useCallback((name: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    dragMovedRef.current = false
-    setDragging({ name, sx: e.clientX, sy: e.clientY })
-  }, [])
-
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!dragging) return
-    const dx = (e.clientX - dragging.sx) * (viewBox.w / 800)
-    const dy = (e.clientY - dragging.sy) * (viewBox.h / 600)
-    if (dx !== 0 || dy !== 0) dragMovedRef.current = true
-    setDragOffsets(prev => ({
-      ...prev,
-      [dragging.name]: {
-        dx: (prev[dragging.name]?.dx || 0) + dx,
-        dy: (prev[dragging.name]?.dy || 0) + dy,
-      },
-    }))
-    setDragging({ ...dragging, sx: e.clientX, sy: e.clientY })
-  }, [dragging, viewBox])
-
-  if (characters.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full text-xs text-[var(--color-text-muted)]">
-        {t('relationshipGraph.empty')}
-      </div>
-    )
+  const handlePointerMove = (event: PointerEvent<SVGSVGElement>) => {
+    const current = drag.current
+    if (current?.id !== event.pointerId) return
+    const dx = event.clientX - current.start.x
+    const dy = event.clientY - current.start.y
+    if (!current.moved && Math.hypot(dx, dy) < 4) return
+    current.moved = true
+    const x = current.origin.x + dx * current.scale
+    const y = current.origin.y + dy * current.scale
+    const name = current.name
+    if (name === undefined) setPan({ x, y })
+    else setOffsets(previous => new Map(previous).set(name, { x, y }))
   }
+
+  const handlePointerEnd = (event: PointerEvent<SVGSVGElement>) => {
+    const current = drag.current
+    if (current?.id !== event.pointerId) return
+    drag.current = null
+    if (event.type === 'pointerup' && !current.moved) setFocusedName(current.name ?? null)
+  }
+
+  if (characters.length === 0) return <EmptyState icon={<Network size={32} />} message={t('relationshipGraph.empty')} />
 
   return (
-    <div className="relative w-full h-full overflow-hidden" style={{ backgroundColor: 'var(--color-editor-bg)' }}>
-      {/* 工具栏 */}
-      <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
-        {/* tier 筛选 */}
-        {([null, 1, 2, 3] as Array<number | null>).map(ti => (
-          <button
-            key={String(ti)}
-            className="text-micro px-1.5 py-0.5 rounded transition-colors border cursor-pointer"
-            style={{
-              backgroundColor: tierFilter === ti ? 'rgba(var(--color-accent-rgb),0.15)' : 'var(--color-bg-elevated)',
-              borderColor: tierFilter === ti ? 'var(--color-accent)' : 'var(--color-border)',
-              color: tierFilter === ti ? 'var(--color-accent)' : 'var(--color-text-muted)',
-            }}
-            onClick={() => setTierFilter(ti)}
-            type="button"
-          >
-            {ti === null ? t('graph.filterAll') : ti === 1 ? t('graph.tierCore') : ti === 2 ? t('graph.tierImportant') : t('graph.tierMinor')}
-          </button>
-        ))}
-        <div className="w-px h-4 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
-        {/* SVG viewBox 语义：viewBox 宽高增大 → 内容缩小；减小 → 内容放大。
-            因此「缩小」按钮增大 viewBox（factor>1），「放大」按钮减小 viewBox（factor<1）。
-            曾方向写反（0.8/1.25 对调），用户实测报告 #28 */}
-        <button
-          className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
-          onClick={() => zoom(1.25)} title={t('zoom.out')} type="button"
-        >
-          <ZoomOut size={14} />
-        </button>
-        <button
-          className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
-          onClick={() => zoom(0.8)} title={t('zoom.in')} type="button"
-        >
-          <ZoomIn size={14} />
-        </button>
-        <button
-          className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
-          onClick={resetView} title={t('zoom.reset')} type="button"
-        >
-          <Maximize2 size={14} />
-        </button>
+    <div className="nf-relationship-graph">
+      <div className="nf-graph-toolbar">
+        <div className="nf-character-search">
+          <Search size={14} aria-hidden="true" />
+          <Input type="search" value={search} placeholder={t('charList.searchPlaceholder')} aria-label={t('charList.searchPlaceholder')}
+            onChange={event => {
+              setSearch(event.currentTarget.value)
+              setFocusedName(null)
+              resetViewport()
+            }} />
+        </div>
+        <FilterButtons size="sm" value={tier} onChange={value => { setTier(value); resetViewport() }}
+          items={[0, 1, 2, 3].map(value => ({
+            value,
+            label: value === 0 ? t('graph.filterAll') : t(characterTier(value).label),
+          }))} />
+        <div className="nf-graph-zoom" aria-label={t('graph.canvasControls')} role="group">
+          <Button type="button" variant="ghost" size="icon" className="size-[32px]" title={t('zoom.out')} aria-label={t('zoom.out')}
+            disabled={zoom <= MIN_ZOOM} onClick={() => setZoom(value => Math.max(MIN_ZOOM, value / 1.25))}>
+            <ZoomOut size={14} aria-hidden="true" />
+          </Button>
+          <Button type="button" variant="ghost" size="icon" className="size-[32px]" onClick={resetViewport}
+            title={t('graph.resetView')} aria-label={t('graph.resetView')}><Maximize2 size={14} aria-hidden="true" /></Button>
+          <Button type="button" variant="ghost" size="icon" className="size-[32px]" title={t('zoom.in')} aria-label={t('zoom.in')}
+            disabled={zoom >= MAX_ZOOM} onClick={() => setZoom(value => Math.min(MAX_ZOOM, value * 1.25))}>
+            <ZoomIn size={14} aria-hidden="true" />
+          </Button>
+        </div>
       </div>
 
-      {/* 图例 */}
-      <div className="absolute bottom-2 left-2 z-10 flex items-center gap-2 text-2xs"
-        style={{ color: 'var(--color-text-muted)' }}>
-        {Object.entries(RELATION_COLORS).slice(0, 6).map(([k, v]) => (
-          <span key={k} className="flex items-center gap-0.5">
-            <span className="w-2 h-0.5 rounded" style={{ backgroundColor: v }} />
-            {k === 'ally' ? t('character.relType.ally') : k === 'enemy' ? t('character.relType.enemy') : k === 'family' ? t('character.relType.family') :
-             k === 'master_student' ? t('character.relType.masterStudent') : k === 'lover' ? t('character.relType.lover') : k === 'rival' ? t('character.relType.rival') : t('character.relType.other')}
-          </span>
-        ))}
-      </div>
-
-      {/* SVG 画布 */}
-      <svg
-        ref={svgRef}
-        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
-        className="w-full h-full cursor-grab active:cursor-grabbing"
-        onMouseMove={handleMouseMove}
-        onMouseUp={() => setDragging(null)}
-        onMouseLeave={() => setDragging(null)}
-      >
-        {/* 连线 */}
-        {visibleEdges.map((edge, i) => {
-          const a = visibleNodes.find(n => n.name === edge.from)
-          const b = visibleNodes.find(n => n.name === edge.to)
-          if (!a || !b) return null
-          const mx = (a.x + b.x) / 2
-          const my = (a.y + b.y) / 2
-          return (
-            <g key={i}>
-              <line
-                x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={RELATION_COLORS[edge.type] || 'var(--color-text-muted)'}
-                strokeOpacity={0.4}
-                strokeWidth={1.5}
-              />
-              {edge.label && (
-                <text x={mx} y={my - 4} textAnchor="middle" fontSize={11}
-                  fill="var(--color-text-muted)" opacity={0.7}
-                >
-                  {edge.label}
-                </text>
+      {nodes.size === 0 ? <EmptyState message={t('charList.noMatches')} /> : (
+        <div className="nf-graph-workspace">
+          <div className="nf-graph-main">
+            <svg
+              role="group"
+              aria-label={t('character.relationGraph')}
+              viewBox={`${left} ${top} ${width} ${height}`}
+              className="nf-graph-canvas"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerEnd}
+              onPointerCancel={handlePointerEnd}
+              onLostPointerCapture={handlePointerEnd}
+            >
+              <defs>
+                <pattern id={gridId} width="24" height="24" patternUnits="userSpaceOnUse">
+                  <circle cx="12" cy="12" r="0.9" fill="var(--color-border)" />
+                </pattern>
+              </defs>
+              <rect x={left} y={top} width={width} height={height} fill={`url(#${gridId})`} aria-hidden="true" />
+              {visibleEdges.map(edge => {
+                const start = nodes.get(edge.source)!
+                const end = nodes.get(edge.target)!
+                const connected = edge.source === focusedName || edge.target === focusedName
+                // 近垂直的连线把标签放在侧边，避免盖住节点下方的姓名。
+                const vertical = Math.abs(end.y - start.y) > Math.abs(end.x - start.x)
+                return (
+                  <g key={edge.id} className="nf-graph-edge" data-dimmed={!!focused && !connected} aria-hidden="true">
+                    <line x1={start.x} y1={start.y} x2={end.x} y2={end.y}
+                      stroke={RELATION_COLORS[edge.type]} strokeWidth={connected ? 2.5 : 1.5} />
+                    {connected && (
+                      <text className="nf-graph-edge-label" textAnchor={vertical ? 'start' : 'middle'}
+                        x={(start.x + end.x) / 2 + (vertical ? 10 : 0)} y={(start.y + end.y) / 2 + (vertical ? 4 : -9)}>
+                        {abbreviate(edge.label || t(relationLabels[edge.type]), 22)}
+                      </text>
+                    )}
+                  </g>
+                )
+              })}
+              {[...nodes.values()].map(({ card, radius, x, y }) => {
+                const active = focusedName === card.name
+                const name = card.name || t('character.unnamed')
+                return (
+                  <g key={card.name} data-graph-node={card.name} className="nf-graph-node" role="button"
+                    tabIndex={0} aria-pressed={active} aria-label={name} data-role={characterRole(card.role)}
+                    data-muted={!active && (focused ? !neighbors.has(card.name) : !matches.has(card.name))}
+                    transform={`translate(${x} ${y})`}
+                    onClick={event => { if (event.detail === 0) setFocusedName(card.name) }}
+                    onKeyDown={event => {
+                      if (event.key !== 'Enter' && event.key !== ' ') return
+                      event.preventDefault()
+                      setFocusedName(card.name)
+                    }}>
+                    <title>{name}</title>
+                    <circle className="nf-graph-node-ring" r={radius + 5} />
+                    <circle className="nf-graph-node-circle" r={radius} />
+                    <text className="nf-graph-node-initial" textAnchor="middle" dominantBaseline="central" aria-hidden="true">
+                      {Array.from(name)[0]}
+                    </text>
+                    <text className="nf-graph-node-label" textAnchor="middle" y={radius + 18} aria-hidden="true">
+                      {abbreviate(name, 16)}
+                    </text>
+                  </g>
+                )
+              })}
+            </svg>
+            <div className="nf-graph-footer">
+              <span className="nf-character-note" role="status">
+                {t('graph.summary').replace('{characters}', String(nodes.size)).replace('{links}', String(visibleEdges.length))}
+              </span>
+              {types.length > 0 && (
+                <ul className="nf-graph-legend">
+                  {types.map(type => <li key={type}><span style={{ background: RELATION_COLORS[type] }} />{t(relationLabels[type])}</li>)}
+                </ul>
               )}
-            </g>
-          )
-        })}
-
-        {/* 节点 */}
-        {visibleNodes.map(node => {
-          const color = node.role === 'protagonist' ? 'var(--color-success)'
-            : node.role === 'antagonist' ? 'var(--color-error)'
-            : 'var(--color-accent)'
-          const r = ROLE_SIZES[node.role] || 18
-
-          return (
-            <g key={node.name} style={{ cursor: 'pointer' }}>
-              {/* 光晕 */}
-              <circle cx={node.x} cy={node.y} r={r + 8} fill={color} opacity={0.08} />
-              {/* 节点圆 */}
-              <circle
-                cx={node.x} cy={node.y} r={r}
-                fill={color} fillOpacity={0.2}
-                stroke={color} strokeWidth={2}
-                onMouseDown={(e) => handleMouseDown(node.name, e)}
-                onClick={() => { if (dragMovedRef.current) return; onSelect?.(node.name) }}
-              />
-              {/* 名字 */}
-              <text
-                x={node.x} y={node.y + r + 14}
-                textAnchor="middle" fontSize={12}
-                fill={color} fontWeight="bold"
-                style={{ pointerEvents: 'none', userSelect: 'none' }}
-              >
-                {node.name}
-              </text>
-            </g>
-          )
-        })}
-      </svg>
+            </div>
+          </div>
+          <aside className="nf-graph-inspector" aria-label={t('character.relations')}>
+            {focused ? (
+              <>
+                <div className="nf-graph-inspector-profile">
+                  <div className="min-w-0">
+                    <h3 title={focused.card.name}>{focused.card.name || t('character.unnamed')}</h3>
+                    <SemanticLabel name={characterRole(focused.card.role)}>{t(characterRoles[characterRole(focused.card.role)])}</SemanticLabel>
+                  </div>
+                  <Button type="button" variant="outline" size="icon" className="size-[32px] shrink-0" title={t('graph.openProfile')}
+                    aria-label={t('graph.openProfile')} onClick={() => onSelect(focused.card.name)}>
+                    <ArrowUpRight size={14} aria-hidden="true" />
+                  </Button>
+                </div>
+                <div className="nf-graph-inspector-heading">
+                  <h4>{t('character.relations')}</h4>
+                  <CountBadge value={focusedEdges.length} />
+                </div>
+                {focusedEdges.length === 0 ? <p className="nf-character-note">{t('character.backlinks.noRelations')}</p> : (
+                  <ul className="nf-graph-neighbors">
+                    {focusedEdges.map(edge => {
+                      const name = edge.source === focusedName ? edge.target : edge.source
+                      return (
+                        <li key={edge.id}>
+                          <button type="button" title={name} onClick={() => setFocusedName(name)}>
+                            <span className="min-w-0">
+                              <strong>{name}</strong>
+                              <span className="block truncate">{edge.label || t(relationLabels[edge.type])}</span>
+                            </span>
+                            <ChevronRight size={14} className="shrink-0" aria-hidden="true" />
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              </>
+            ) : <p className="nf-character-note">{t('graph.selectCharacter')}</p>}
+          </aside>
+        </div>
+      )}
     </div>
   )
 }
