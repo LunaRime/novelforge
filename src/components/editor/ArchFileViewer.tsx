@@ -77,6 +77,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
   const [editorContent, setEditorContent] = useState(initialContent)
   const [previewContent, setPreviewContent] = useState(initialContent)
   const [editing, setEditing] = useState(false)
+  const [markdownToolsHost, setMarkdownToolsHost] = useState<HTMLDivElement | null>(null)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
@@ -255,7 +256,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
           backgroundColor: 'var(--color-editor-bg)',
         }}
       >
-        {/* 左侧：图标、标题和描述 */}
+        {/* 左侧：文档说明与 Markdown 格式工具 */}
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>{meta ? renderIcon(meta.iconName, 14) : <FileText size={14} />}</span>
           <span className="text-xs font-medium flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
@@ -266,6 +267,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
               — {meta.desc}
             </span>
           )}
+          <div ref={setMarkdownToolsHost} hidden={!editing} />
         </div>
 
         {/* 右侧：字数 + 状态 + 操作按钮 */}
@@ -361,6 +363,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
       <div hidden={!editing} className="min-h-0 flex-1 overflow-hidden">
         <CodeMirrorEditor
           mode="document"
+          markdownToolsHost={editing ? markdownToolsHost : null}
           content={editorContent}
           filePath={filePath}
           onChange={handleChange}

@@ -5,7 +5,7 @@ import { generateFileChapterContinuation } from '../../services/workflows/file-c
 import type { FileDraftCommand } from '../../shared/ipc-channels'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 
 export type ContinuationCommand = Extract<FileDraftCommand, { kind: 'create' }>
 
@@ -62,11 +62,11 @@ export function FileChapterContinuation({ token, number, source, disabled, onPub
           <Input aria-label={t('project.fileEditorContinuationTitle')} value={title} maxLength={200}
             readOnly={status === 'running' || Boolean(proposal)} onChange={event => setTitle(event.target.value)} />
         </label>
-        <label className="flex flex-col gap-1">
-          {t('project.fileEditorContinuationGuidance')}
-          <Textarea value={guidance} maxLength={4000} readOnly={status === 'running' || Boolean(proposal)}
+        <div className="flex flex-col gap-1">
+          <label htmlFor="nf-file-continuation-guidance">{t('project.fileEditorContinuationGuidance')}</label>
+          <MarkdownField startInEdit id="nf-file-continuation-guidance" value={guidance} maxLength={4000} readOnly={status === 'running' || Boolean(proposal)}
             onChange={event => setGuidance(event.target.value)} />
-        </label>
+        </div>
         <div className="flex flex-wrap gap-2">
           {!proposal && <Button type="submit" disabled={disabled || status === 'running' || !title.trim()}>{t('project.fileEditorContinuationGenerate')}</Button>}
           {status === 'running' && <Button type="button" variant="outline" onClick={() => { abort(); setStatus(undefined) }}>{t('action.cancel')}</Button>}

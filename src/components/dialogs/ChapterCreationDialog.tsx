@@ -20,7 +20,7 @@ import {
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 
@@ -298,7 +298,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
 
               <div>
                 <Label>{t('chapter.purpose')}</Label>
-                <Textarea
+                <MarkdownField startInEdit
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
                   placeholder={t('chapter.purposePlaceholder')}
@@ -308,7 +308,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
 
               <div>
                 <Label>{t('chapter.keyEvents')}</Label>
-                <Textarea
+                <MarkdownField startInEdit
                   value={keyEvents}
                   onChange={(e) => setKeyEvents(e.target.value)}
                   placeholder={t('chapter.eventsPlaceholder')}
@@ -318,7 +318,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
 
               <div>
                 <Label>{t('chapter.authorGuidance')} <span className="text-micro opacity-50">{t('chapter.authorGuidanceHint').replace('{optional}', t('chapter.optional'))}</span></Label>
-                <Textarea
+                <MarkdownField startInEdit
                   value={userGuidance}
                   onChange={(e) => setUserGuidance(e.target.value)}
                   placeholder={t('chapter.guidancePlaceholder')}

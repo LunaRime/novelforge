@@ -11,7 +11,7 @@ import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { SemanticLabel } from '../ui/SemanticLabel'
 import { cn } from '../../lib/utils'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { getGenreTextKey, getAudienceTextKey } from '../../services/novel-config-normalize'
@@ -289,7 +289,7 @@ export default function ArchitectureConfirmDialog({
                       <label className="text-micro font-medium mb-1 block" style={{ color: 'var(--color-text-muted)' }}>
                         {f.label}
                       </label>
-                      <Textarea
+                      <MarkdownField startInEdit
                         value={stepGuidance[f.key] || ''}
                         onChange={e => setStepGuidance(prev => ({ ...prev, [f.key]: e.target.value }))}
                         placeholder={t('archConfirm.guidancePlaceholderFull').replace('{label}', f.label)}

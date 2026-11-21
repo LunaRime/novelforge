@@ -10,7 +10,7 @@ import { memo, useMemo } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
@@ -156,8 +156,8 @@ export default memo(function AIActionDialog({
             <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
               {t(refinePromptLabelKey)}
             </label>
-            {/* 描边/正文色/焦点环/禁用态走 ui/Textarea；只覆盖底色（对话框用 elevated 层）与最小高度 */}
-            <Textarea
+            {/* 描边/正文色/焦点环/禁用态走 ui/MarkdownField；只覆盖底色（对话框用 elevated 层）与最小高度 */}
+            <MarkdownField startInEdit
               className="px-3 py-2 text-sm"
               style={{ background: 'var(--color-bg-elevated)', minHeight: 72 }}
               placeholder={t(refinePromptPlaceholderKey)}

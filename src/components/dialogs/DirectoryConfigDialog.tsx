@@ -11,7 +11,7 @@ import {
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
 import type { DirectoryWorkflowParams } from '../../services/workflows/directory-workflow'
 
@@ -299,7 +299,7 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
             <Label className="text-xs font-semibold mb-2 block" style={{ color: 'var(--color-text)' }}>
               {t('blueprintGen.styleGuide')}
             </Label>
-            <Textarea
+            <MarkdownField startInEdit
               value={pacingGuidance}
               onChange={e => setPacingGuidance(e.target.value)}
               placeholder={t('blueprintGen.stylePlaceholder')}

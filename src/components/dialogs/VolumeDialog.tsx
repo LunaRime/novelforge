@@ -16,7 +16,7 @@ import {
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import type { VolumeData } from '../../../electron/repositories/volume-repository'
 
 interface Props {
@@ -175,7 +175,7 @@ export default function VolumeDialog({ isOpen, onClose, editing, existingNumbers
             <Label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--color-text)' }}>
               {t('volume.description')}
             </Label>
-            <Textarea
+            <MarkdownField startInEdit
               value={description}
               onChange={e => setDescription(e.target.value)}
               rows={3}

@@ -7,7 +7,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 
 const ROLES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
 
@@ -184,7 +184,7 @@ export function BlueprintDetail({ selected, canWrite, saving, deleting, updateFi
 
             <div>
               <Label>{t('blueprint.mcGoal')}</Label>
-              <Textarea
+              <MarkdownField startInEdit
                 value={selected.purpose}
                 onChange={e => updateField('purpose', e.target.value)}
                 placeholder={t('chapter.placeholderConflict')}
@@ -194,7 +194,7 @@ export function BlueprintDetail({ selected, canWrite, saving, deleting, updateFi
 
             <div>
               <Label>{t('blueprint.conflict')}</Label>
-              <Textarea
+              <MarkdownField startInEdit
                 value={selected.keyEvents}
                 onChange={e => updateField('keyEvents', e.target.value)}
                 placeholder={t('chapter.placeholderActions')}
@@ -204,7 +204,7 @@ export function BlueprintDetail({ selected, canWrite, saving, deleting, updateFi
 
             <div>
               <Label>{t('blueprint.cliffhanger')}</Label>
-              <Textarea
+              <MarkdownField startInEdit
                 value={selected.suspenseHook}
                 onChange={e => updateField('suspenseHook', e.target.value)}
                 placeholder={t('chapter.placeholderSuspense')}
@@ -229,7 +229,7 @@ export function BlueprintDetail({ selected, canWrite, saving, deleting, updateFi
                   {t('chapter.guidanceHint')}
                 </span>
               </Label>
-              <Textarea
+              <MarkdownField startInEdit
                 value={selected.userGuidance}
                 onChange={e => updateField('userGuidance', e.target.value)}
                 placeholder={t('chapter.placeholderGuidance')}
@@ -257,7 +257,7 @@ export function BlueprintDetail({ selected, canWrite, saving, deleting, updateFi
                   }
                 </span>
               </Label>
-              <Textarea
+              <MarkdownField startInEdit
                 value={selected.notes || ''}
                 onChange={e => updateField('notes', e.target.value)}
                 placeholder={t('chapter.placeholderNotes')}

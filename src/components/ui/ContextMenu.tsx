@@ -38,6 +38,7 @@ const enabledItems = (menu: HTMLElement) => [...menu.querySelectorAll<HTMLButton
 export function ContextMenu({ items, position, anchor, label, onClose, autoFocus = true }: Props) {
   const menuRef = useRef<HTMLDivElement>(null)
   const initialFocus = useRef<HTMLElement | null>(null)
+  const dialog = anchor?.current?.closest<HTMLElement>('[role=dialog]')
   const x = position?.x
   const y = position?.y
   const restoreFocus = () => (anchor?.current ?? initialFocus.current)?.focus({ preventScroll: true })
@@ -45,6 +46,8 @@ export function ContextMenu({ items, position, anchor, label, onClose, autoFocus
   useLayoutEffect(() => {
     const menu = menuRef.current
     if (!menu) return
+    // 放在对话框的焦点范围内，提升到浏览器顶层后仍按窗口坐标定位。
+    if (dialog) menu.showPopover?.()
     const place = () => {
       const rect = anchor?.current?.getBoundingClientRect()
       const gap = 8
@@ -60,7 +63,7 @@ export function ContextMenu({ items, position, anchor, label, onClose, autoFocus
     const observer = typeof ResizeObserver === 'undefined' ? undefined : new ResizeObserver(place)
     observer?.observe(menu)
     return () => { observer?.disconnect(); window.removeEventListener('resize', place) }
-  }, [anchor, x, y])
+  }, [anchor, dialog, x, y])
 
   useLayoutEffect(() => {
     const menu = menuRef.current
@@ -82,14 +85,16 @@ export function ContextMenu({ items, position, anchor, label, onClose, autoFocus
     const escape = (event: globalThis.KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return
       event.preventDefault()
+      if (dialog) event.stopPropagation()
       onClose()
       const target = anchor?.current ?? initialFocus.current
       target?.focus({ preventScroll: true })
     }
     document.addEventListener('mousedown', outside, true)
-    document.addEventListener('keydown', escape)
-    return () => { document.removeEventListener('mousedown', outside, true); document.removeEventListener('keydown', escape) }
-  }, [onClose, anchor])
+    const keyboard = dialog ? window : document
+    keyboard.addEventListener('keydown', escape as EventListener, !!dialog)
+    return () => { document.removeEventListener('mousedown', outside, true); keyboard.removeEventListener('keydown', escape as EventListener, !!dialog) }
+  }, [onClose, anchor, dialog])
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Tab') {
@@ -108,7 +113,7 @@ export function ContextMenu({ items, position, anchor, label, onClose, autoFocus
   }
 
   return createPortal(
-    <div ref={menuRef} role="menu" aria-label={label} tabIndex={-1} className="nf-context-menu"
+    <div ref={menuRef} role="menu" aria-label={label} tabIndex={-1} popover={dialog ? 'manual' : undefined} className="nf-context-menu"
       onKeyDown={onKeyDown} onContextMenu={event => { event.preventDefault(); event.stopPropagation() }}>
       {items.map(entry => {
         if ('type' in entry) {
@@ -124,6 +129,6 @@ export function ContextMenu({ items, position, anchor, label, onClose, autoFocus
           }} />
       })}
     </div>,
-    document.body,
+    dialog ?? document.body,
   )
 }

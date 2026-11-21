@@ -22,3 +22,20 @@
   border-inline-start: 2px solid var(--color-workbench-fold);
   color: var(--color-text-secondary);
 }
+
+/* 分辨层级、重点和引文，颜色随当前主题与稿纸调整。 */
+.nf-markdown-document :is(h1, h2, h3, h4, h5, h6), .nf-md-heading {
+  color: var(--color-accent);
+  font-weight: 650;
+}
+.nf-markdown-document h2 { padding-block-end: 0.25em; border-block-end: 1px solid var(--color-border); }
+.nf-markdown-document strong, .nf-md-strong {
+  color: color-mix(in srgb, var(--color-text) 60%, var(--color-accent));
+  font-weight: 650;
+}
+.nf-markdown-document em, .nf-md-emphasis { color: var(--color-text-secondary); font-style: italic; }
+.nf-markdown-document li::marker, .nf-md-marker { color: var(--color-accent); }
+.nf-markdown-document del, .nf-md-strike { color: var(--color-text-muted); text-decoration: line-through; }
+.nf-md-link { color: var(--color-accent); text-decoration: underline; }
+.nf-md-quote { color: var(--color-text-secondary); }
+.nf-md-code { color: var(--color-accent); background: var(--color-hover); }

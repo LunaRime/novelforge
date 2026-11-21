@@ -3,7 +3,8 @@ import { createPortal } from 'react-dom'
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
-import { syntaxTree } from '@codemirror/language'
+import { HighlightStyle, syntaxHighlighting, syntaxTree } from '@codemirror/language'
+import { tags } from '@lezer/highlight'
 import { languages } from '@codemirror/language-data'
 import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search, searchKeymap } from '@codemirror/search'
@@ -34,6 +35,8 @@ import {
   setHunkRanges,
 } from './codemirror-inline-accept'
 import { countUndecided, type SubHunk } from '../../services/diff/hunk-model'
+import MarkdownFormatMenu from '../ui/MarkdownFormatMenu'
+import { markdownFormatChange, type MarkdownFormat } from '../ui/markdown-format'
 import ManuscriptTextTools, { useManuscriptSearchTarget } from './ManuscriptTextTools'
 import { InlineAcceptBar } from './InlineAcceptBar'
 import { InlineAcceptPopover } from './InlineAcceptPopover'
@@ -196,6 +199,18 @@ function stripThinkStream(chunk: string, state: { inThink: boolean }): string {
   return out
 }
 
+// 语法颜色与预览共用主题语义，普通正文保留墨色。
+const markdownHighlight = syntaxHighlighting(HighlightStyle.define([
+  { tag: tags.heading, class: 'nf-md-heading' },
+  { tag: tags.strong, class: 'nf-md-strong' },
+  { tag: tags.emphasis, class: 'nf-md-emphasis' },
+  { tag: tags.strikethrough, class: 'nf-md-strike' },
+  { tag: [tags.link, tags.url], class: 'nf-md-link' },
+  { tag: tags.quote, class: 'nf-md-quote' },
+  { tag: tags.monospace, class: 'nf-md-code' },
+  { tag: [tags.processingInstruction, tags.list], class: 'nf-md-marker' },
+]))
+
 export type CodeMirrorEditorProps = {
   content: string
   tabId?: string
@@ -204,6 +219,7 @@ export type CodeMirrorEditorProps = {
   onChange?: (content: string) => void
   onSave?: (content: string) => Promise<void> | void
   textToolsHost?: HTMLElement | null
+  markdownToolsHost?: HTMLElement | null
   onSaveUnderline?: (before: string, after: string) => Promise<boolean>
   onCharCountChange?: (count: number) => void
   placeholder?: string
@@ -344,6 +360,7 @@ export default function CodeMirrorEditor({
   onSave,
   onSaveUnderline,
   textToolsHost,
+  markdownToolsHost,
   onCharCountChange,
   mode = 'document',
   paperHeading,
@@ -621,7 +638,16 @@ export default function CodeMirrorEditor({
   const [loadingDots, setLoadingDots] = useState('.')
   const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
   const [savingUnderline, setSavingUnderline] = useState(false)
-  const canUnderline = mode === 'prose' && (editable || !!onSaveUnderline)
+  const canUnderline = editable || (mode === 'prose' && !!onSaveUnderline)
+
+  const formatMarkdown = (format: MarkdownFormat) => {
+    const view = editorRef.current?.view
+    if (!view || view.state.readOnly) return
+    const { from, to } = view.state.selection.main
+    const { anchor, head, ...changes } = markdownFormatChange(view.state.doc.toString(), from, to, format)
+    view.dispatch({ changes, selection: { anchor, head }, userEvent: 'input.format' })
+    view.focus()
+  }
 
   const handleUnderline = async () => {
     const view = editorRef.current?.view
@@ -773,7 +799,7 @@ export default function CodeMirrorEditor({
           !view.contentDOM.contains(sel.focusNode)) {
         const coords = view.coordsAtPos(selectionRange.from)
         if (coords) {
-          setBubblePos({ top: coords.top, left: coords.left })
+          setBubblePos({ top: Math.max(60, coords.top - 8), left: coords.left })
         } else {
           setBubbleOpen(false)
         }
@@ -783,7 +809,7 @@ export default function CodeMirrorEditor({
       const rect = sel.getRangeAt(0).getBoundingClientRect()
       if (rect.width === 0) {
         const coords = view.coordsAtPos(selectionRange.from)
-        if (coords) setBubblePos({ top: coords.top, left: coords.left })
+        if (coords) setBubblePos({ top: Math.max(60, coords.top - 8), left: coords.left })
         else setBubbleOpen(false)
         return
       }
@@ -795,16 +821,9 @@ export default function CodeMirrorEditor({
         return
       }
 
-      let top = rect.top - 5 // 与选区顶部有些许间距
-      const left = rect.left + rect.width / 2
-
-      // 当用户圈选了一大段并向下滚动时，如果选区顶部滚出了视区，
-      // 我们让气泡悬浮在视区顶部边缘，直到选区底部也完全滚出视区。
-      if (top < viewRect.top + 45) {
-        top = Math.min(viewRect.top + 45, rect.bottom - 10)
-      }
-
-      setBubblePos({ top, left })
+      // 气泡的底边留在选区上方。长选区卷出视口后锚定稿纸首行上沿。
+      const top = Math.max(60, Math.max(rect.top, viewRect.top) - 8)
+      setBubblePos({ top, left: rect.left + rect.width / 2 })
     }
 
     const onScrollOrResize = () => {
@@ -859,7 +878,10 @@ export default function CodeMirrorEditor({
     "&.cm-focused": { outline: "none" },
     ".cm-cursor": { borderLeftColor: "var(--color-accent)", borderLeftWidth: "2px" },
     ".cm-activeLine": { backgroundColor: "transparent" },
+    // CodeMirror 默认在文字下方绘制选区。稿纸有实体底色，选区需在同一滚动容器内浮到稿纸上。
+    ".cm-selectionLayer": { zIndex: "0 !important", pointerEvents: "none" },
     ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-editor-selection, var(--color-hover)) !important" },
+    ".cm-selectionMatch": { backgroundColor: "color-mix(in srgb, var(--color-accent) 12%, transparent)" },
     ".cm-line": { padding: "0", transition: "opacity 140ms ease, background-color 140ms ease" },
     ".cm-line.cm-paragraph-end": { paddingBottom: "1em" },
     ".cm-line.cm-focus-paragraph": {
@@ -869,11 +891,6 @@ export default function CodeMirrorEditor({
     // 专注模式：当前段保持全亮，其余段压暗（iA Writer 的「只看见这一段」）
     "&.cm-focus-writing .cm-line": { opacity: "0.52" },
     "&.cm-focus-writing .cm-line.cm-focus-paragraph": { opacity: "1" },
-    // 防御性兜底（非渲染来源）：当前依赖下 `**文字**`/`*文字*` 的粗体/斜体渲染由
-    // defaultHighlightStyle（basicSetup 的 syntaxHighlighting）提供的散列类名实现，
-    // .cm-strong/.cm-em 并不匹配任何实际 DOM 类；保留以防未来替换高亮主题后丢失
-    ".cm-strong": { fontWeight: "bold" },
-    ".cm-em": { fontStyle: "italic" },
   }), [mode])
 
   // 构建扩展
@@ -926,13 +943,13 @@ export default function CodeMirrorEditor({
     // 会话期由 setHunkRanges effect 动态驱动，无需 reconfigure
     exts.push(...inlineAcceptExtensions())
     if (mode === 'document' || mode === 'prose') {
-      exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }))
+      exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }), markdownHighlight, underlinePreview)
     }
     // 正文排版扩展只在 prose 生效：文档/架构编辑器保持紧凑，不抢文字工作区的视觉节奏
     if (mode === 'prose') {
       // 段间距始终有；当前段高亮/压暗只属于专注模式（规范：专注模式隐藏面板 + 当前段落高亮）
       const focusParagraph = focusMode && paragraphFocus
-      exts.push(paragraphVisuals(focusParagraph), underlinePreview)
+      exts.push(paragraphVisuals(focusParagraph))
       if (typewriter) exts.push(typewriterScroll())
       if (focusParagraph) exts.push(EditorView.editorAttributes.of({ class: 'cm-focus-writing' }))
     }
@@ -1167,6 +1184,7 @@ export default function CodeMirrorEditor({
           handleDocClick()
         }
       }}>
+      {markdownToolsHost && editable && createPortal(<MarkdownFormatMenu onFormat={formatMarkdown} />, markdownToolsHost)}
       {textToolsHost && cmView && createPortal(<ManuscriptTextTools key={filePath} view={cmView} />, textToolsHost)}
       {mode === 'prose' && paperHeading && (
         <div className="nf-prose-heading-gutter">
@@ -1309,25 +1327,11 @@ export default function CodeMirrorEditor({
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                    onClick={() => {
-                      const view = editorRef.current?.view
-                      if (!view) return
-                      // 只读（已定稿/归档）时不可加粗——CM readOnly 只拦键盘输入，
-                      // 拦不住程序化 dispatch，此处须自行尊重 editable（QA 修复 B）
-                      if (!editable) return
-                      // 用当前光标选区而非 selectionRange（后者是 AI 气泡的旧选区，
-                      // 光标移位后会错位加粗旧段——QA 修复 B）；无选区则 no-op
-                      const sel = view.state.selection.main
-                      if (sel.empty) return
-                      const text = view.state.sliceDoc(sel.from, sel.to)
-                      if (!text) return
-                      view.dispatch({
-                        changes: { from: sel.from, to: sel.to, insert: `**${text}**` }
-                      })
-                    }}
+                    onClick={() => formatMarkdown('bold')}
                   ><Bold size={14} /></button>
                 </>
               )}
+              {editable && <MarkdownFormatMenu compact onFormat={formatMarkdown} />}
               {canUnderline && (
                 <button type="button"
                   className="grid size-8 place-items-center rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] disabled:opacity-50 pointer-coarse:size-11"

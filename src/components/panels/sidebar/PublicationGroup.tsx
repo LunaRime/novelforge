@@ -17,7 +17,7 @@ import { confirm } from '../../ui/Confirm'
 import { Button } from '../../ui/Button'
 import { Input } from '../../ui/Input'
 import { Label } from '../../ui/Label'
-import { Textarea } from '../../ui/Textarea'
+import MarkdownField from '../../ui/MarkdownField'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../../ui/Dialog'
@@ -256,7 +256,7 @@ function PublishImportDialog({ isOpen, onClose, existingNumbers }: {
             <Label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--color-text)' }}>
               {t('pub.externalContent')}
             </Label>
-            <Textarea
+            <MarkdownField startInEdit
               value={content}
               onChange={(e) => setContent(e.target.value)}
               rows={5}

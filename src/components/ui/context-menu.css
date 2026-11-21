@@ -13,6 +13,12 @@
   box-shadow: var(--shadow-popover);
 }
 
+.nf-context-menu[popover] {
+  inset: auto;
+  margin: 0;
+  pointer-events: auto;
+}
+
 .nf-context-menu > button {
   min-height: 32px;
   border-radius: var(--radius-md);

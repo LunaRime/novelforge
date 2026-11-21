@@ -26,7 +26,7 @@ import { EmptyState as BaseEmptyState } from '../ui/EmptyState'
 import { Button } from '../ui/Button'
 import { CreateIcon } from '../ui/ActionIcons'
 import { Input } from '../ui/Input'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import { Label } from '../ui/Label'
 import { Disclosure } from '../ui/Disclosure'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
@@ -485,7 +485,7 @@ export default function CharacterEditor() {
               ] as const).map(([field, labelKey]) => (
                 <div key={field}>
                   <Label>{t(labelKey)}</Label>
-                  <Textarea
+                  <MarkdownField startInEdit
                     value={selectedCard.currentState?.[field]?.toString() ?? ''}
                     onChange={(e) => {
                       const cs: CharacterCurrentState = {
@@ -578,15 +578,15 @@ export default function CharacterEditor() {
                     <div><Label>{t('character.gender')}</Label><Input value={selectedCard.gender} onChange={(e) => updateField(selectedCard.name, 'gender', e.target.value)} /></div>
                     <div><Label>{t('character.age')}</Label><Input value={selectedCard.age} onChange={(e) => updateField(selectedCard.name, 'age', e.target.value)} /></div>
                   </div>
-                  <div><Label>{t('character.appearance')}</Label><Textarea value={selectedCard.appearance} onChange={(e) => updateField(selectedCard.name, 'appearance', e.target.value)} rows={3} /></div>
-                  <div><Label>{t('character.personality')}</Label><Textarea value={selectedCard.personality} onChange={(e) => updateField(selectedCard.name, 'personality', e.target.value)} rows={3} /></div>
+                  <div><Label>{t('character.appearance')}</Label><MarkdownField startInEdit value={selectedCard.appearance} onChange={(e) => updateField(selectedCard.name, 'appearance', e.target.value)} rows={3} /></div>
+                  <div><Label>{t('character.personality')}</Label><MarkdownField startInEdit value={selectedCard.personality} onChange={(e) => updateField(selectedCard.name, 'personality', e.target.value)} rows={3} /></div>
 
                   {/* === Tier 1: 完整档案（嵌套在档案区内，少一层分区标题） === */}
                   {(selectedCard.tier ?? 2) <= 1 && (
                     <>
-                      <div><Label>{t('character.background')}</Label><Textarea value={selectedCard.background} onChange={(e) => updateField(selectedCard.name, 'background', e.target.value)} rows={4} /></div>
-                      <div><Label>{t('character.abilities')}</Label><Textarea value={selectedCard.abilities} onChange={(e) => updateField(selectedCard.name, 'abilities', e.target.value)} rows={3} /></div>
-                      <div><Label>{t('character.motivation')}</Label><Textarea value={selectedCard.motivation} onChange={(e) => updateField(selectedCard.name, 'motivation', e.target.value)} rows={2} /></div>
+                      <div><Label>{t('character.background')}</Label><MarkdownField startInEdit value={selectedCard.background} onChange={(e) => updateField(selectedCard.name, 'background', e.target.value)} rows={4} /></div>
+                      <div><Label>{t('character.abilities')}</Label><MarkdownField startInEdit value={selectedCard.abilities} onChange={(e) => updateField(selectedCard.name, 'abilities', e.target.value)} rows={3} /></div>
+                      <div><Label>{t('character.motivation')}</Label><MarkdownField startInEdit value={selectedCard.motivation} onChange={(e) => updateField(selectedCard.name, 'motivation', e.target.value)} rows={2} /></div>
                       {/* 结构化关系编辑器 */}
                       <StructuredRelations
                         relations={selectedCard.relations || '[]'}
@@ -599,16 +599,16 @@ export default function CharacterEditor() {
                           走 ui/Disclosure（箭头/hover 底色/扩点击区/次级色四要素由其保证）；
                           此前手写 details+summary 是 micro+muted，与说明文字同款、看不出可点 */}
                       <Disclosure label={t('character.legacyRelations')} className="mt-2">
-                        <Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder={t('character.legacyPlaceholder')} />
+                        <MarkdownField startInEdit value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder={t('character.legacyPlaceholder')} />
                       </Disclosure>
-                      <div><Label>{t('character.arc')}</Label><Textarea value={selectedCard.arc} onChange={(e) => updateField(selectedCard.name, 'arc', e.target.value)} rows={3} /></div>
+                      <div><Label>{t('character.arc')}</Label><MarkdownField startInEdit value={selectedCard.arc} onChange={(e) => updateField(selectedCard.name, 'arc', e.target.value)} rows={3} /></div>
                     </>
                   )}
                 </>
               )}
 
               {/* 所有 tier 通用：备注 */}
-              <div><Label>{t('character.notes')}</Label><Textarea value={selectedCard.notes} onChange={(e) => updateField(selectedCard.name, 'notes', e.target.value)} rows={2} /></div>
+              <div><Label>{t('character.notes')}</Label><MarkdownField startInEdit value={selectedCard.notes} onChange={(e) => updateField(selectedCard.name, 'notes', e.target.value)} rows={2} /></div>
 
               {/* === 生命周期 + 角色合并（P1-6） === */}
               <LifecycleMergeSection

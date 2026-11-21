@@ -6,6 +6,14 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const editorTexts = {
+  'editor.markdownTools': { 'zh-CN': "Markdown 格式工具", 'en-US': "Markdown formatting", 'ru-RU': "Форматирование Markdown" },
+  'editor.markdownHeading': { 'zh-CN': "标题", 'en-US': "Heading", 'ru-RU': "Заголовок" },
+  'editor.markdownItalic': { 'zh-CN': "斜体", 'en-US': "Italic", 'ru-RU': "Курсив" },
+  'editor.markdownStrike': { 'zh-CN': "删除线", 'en-US': "Strikethrough", 'ru-RU': "Зачёркивание" },
+  'editor.markdownQuote': { 'zh-CN': "引用", 'en-US': "Quote", 'ru-RU': "Цитата" },
+  'editor.markdownList': { 'zh-CN': "项目列表", 'en-US': "Bulleted list", 'ru-RU': "Маркированный список" },
+  'editor.markdownCode': { 'zh-CN': "行内代码", 'en-US': "Inline code", 'ru-RU': "Код в строке" },
+  'editor.markdownLink': { 'zh-CN': "链接", 'en-US': "Link", 'ru-RU': "Ссылка" },
   'editor.refresh': { 'zh-CN': '刷新', 'en-US': 'Refresh', 'ru-RU': 'Обновить' },
   'editor.refreshConfirm': { 'zh-CN': '当前正文有未保存修改，刷新会丢弃这些修改。继续？', 'en-US': 'The editor has unsaved changes; refreshing will discard them. Continue?', 'ru-RU': 'В тексте есть несохранённые правки; обновление их удалит. Продолжить?' },
   'editor.refreshed': { 'zh-CN': '已重新载入', 'en-US': 'Reloaded', 'ru-RU': 'Перезагружено' },

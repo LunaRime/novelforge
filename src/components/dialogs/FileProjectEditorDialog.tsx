@@ -7,6 +7,7 @@ import type { FileAgentEditProposal, FileDraftCommand, FileImportChapter, FileIm
 import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
 import MarkdownContent from '../ui/MarkdownContent'
+import MarkdownField from '../ui/MarkdownField'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
 import { VersionActions, type VersionAction } from '../editor/VersionActions'
@@ -494,7 +495,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               <Button type="button" variant="outline" disabled={busy} onClick={() => void load(workspace.path, recovery.locator)}>
                 {t('action.retry')}
               </Button>
-              <textarea aria-label={t('project.fileEditorBody')} rows={10} readOnly value={text}
+              <MarkdownField startInEdit aria-label={t('project.fileEditorBody')} rows={10} readOnly value={text}
                 className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3" />
               {preview && <div className="max-h-48 overflow-auto rounded border border-[var(--color-border)] p-3"><MarkdownContent content={preview.content} document /></div>}
             </div>
@@ -621,7 +622,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               )}
               {active && (
                 <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void save() }}>
-                  <textarea aria-label={t('project.fileEditorBody')} rows={14} value={text} readOnly={active.readOnly || (busy && !savingBody)}
+                  <MarkdownField startInEdit aria-label={t('project.fileEditorBody')} rows={14} value={text} readOnly={active.readOnly || (busy && !savingBody)}
                     onChange={event => {
                       if (inferenceRun.current || inferencePreview || blueprintPreview) clearInference()
                       setText(event.target.value)

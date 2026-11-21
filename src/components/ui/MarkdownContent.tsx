@@ -168,6 +168,7 @@ const documentComponents: Components = {
   h3: ({ children }) => <h3>{children}</h3>,
   p: ({ children }) => <p>{children}</p>,
   blockquote: ({ children }) => <blockquote>{children}</blockquote>,
+  strong: ({ children }) => <strong>{children}</strong>,
 }
 
 type MarkdownParent = NonNullable<Parameters<AllowElement>[2]>

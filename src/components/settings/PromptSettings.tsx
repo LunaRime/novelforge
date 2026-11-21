@@ -20,7 +20,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
 import { SemanticLabel } from '../ui/SemanticLabel'
-import { Textarea } from '../ui/Textarea'
+import MarkdownField from '../ui/MarkdownField'
 import { confirm } from '../ui/Confirm'
 import { renderLog } from '../../services/render-logger'
 
@@ -308,10 +308,10 @@ function TemplateItem({
 
           {/* 编辑 textarea */}
           <div>
-            {/* 描边/正文色/焦点环（含聚焦时描边转 accent）/禁用态走 ui/Textarea——
+            {/* 描边/正文色/焦点环（含聚焦时描边转 accent）/禁用态走 ui/MarkdownField——
                 原先靠 onFocus/onBlur 手工改 borderColor，现由 focus:border-[var(--color-accent)] 承担。
                 这里只留提示词编辑器特有的：编辑器底色、圆角、等宽字体与高度区间 */}
-            <Textarea
+            <MarkdownField startInEdit
               ref={textareaRef}
               aria-label={PROMPT_NAME_KEYS[builtinTemplate.key]
                 ? t(PROMPT_NAME_KEYS[builtinTemplate.key])
