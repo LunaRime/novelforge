@@ -217,7 +217,7 @@ export const agentTexts = {
   'agent.confirmRewindTitle': { 'zh-CN': '回退确认', 'en-US': 'Confirm rewind', 'ru-RU': 'Подтверждение отката' },
   'agent.mediaFile': { 'zh-CN': '媒体文件', 'en-US': 'Media file', 'ru-RU': 'Медиафайл' },
   'agent.helpTitle': { 'zh-CN': '## NovelForge AI 助手 — 帮助', 'en-US': '## NovelForge AI Assistant — Help', 'ru-RU': '## Помощник NovelForge AI — Справка' },
-  'agent.helpCommands': { 'zh-CN': '### 可用命令\n- `/clear` — 清空当前对话\n- `/new` — 开始新对话\n- `/help` — 显示此帮助信息\n- `/status` — 查看项目状态', 'en-US': '### Available commands\n- `/clear` — clear current conversation\n- `/new` — start a new conversation\n- `/help` — show this help\n- `/status` — view project status', 'ru-RU': '### Доступные команды\n- `/clear` — очистить диалог\n- `/new` — новый диалог\n- `/help` — показать справку\n- `/status` — статус проекта' },
+  'agent.helpCommands': { 'zh-CN': '### 可用命令', 'en-US': '### Available commands', 'ru-RU': '### Доступные команды' },
   'agent.helpMention': { 'zh-CN': '### @ 提及\n输入 `@` 可引用项目上下文：故事架构、角色卡、蓝图、知识库等。', 'en-US': '### @ Mentions\nType `@` to reference project context: story architecture, character cards, blueprints, knowledge base, etc.', 'ru-RU': '### @Упоминания\nВведите `@`, чтобы сослаться на контекст проекта: архитектуру, персонажей, планы, базу знаний.' },
   'agent.helpTools': { 'zh-CN': '### 可用工具', 'en-US': '### Available tools', 'ru-RU': '### Доступные инструменты' },
   'agent.helpToolCount': { 'zh-CN': '当前已加载 **{n}** 个工具、**{m}** 个 Skill。', 'en-US': 'Currently loaded: **{n}** tools, **{m}** skills.', 'ru-RU': 'Загружено: **{n}** инструментов, **{m}** навыков.' },

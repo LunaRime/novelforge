@@ -6,6 +6,16 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const toolTexts = {
+  'cmd.plan': { 'zh-CN': "写作计划", 'en-US': "Writing plan", 'ru-RU': "План работы" },
+  'cmd.planDesc': { 'zh-CN': "根据章节或目标拟定可执行的步骤", 'en-US': "Outline actionable steps for a chapter or goal", 'ru-RU': "Составить шаги для главы или цели" },
+  'cmd.planPrompt': { 'zh-CN': "只制定写作计划。根据目标和可查证的资料说明目标、依赖和检查点，以 Markdown 任务清单列出步骤。目标：{args}", 'en-US': "Create a writing plan only. Use the goal and verifiable context to state objectives, dependencies, and checkpoints, then list steps as Markdown tasks. Goal: {args}", 'ru-RU': "Составь план работы. Укажи цель, зависимости и контрольные точки, затем перечисли шаги в виде задач Markdown. Цель: {args}" },
+  'cmd.review': { 'zh-CN': "稿件审阅", 'en-US': "Manuscript review", 'ru-RU': "Разбор рукописи" },
+  'cmd.reviewDesc': { 'zh-CN': "检查章节的连贯性、人物动机和节奏", 'en-US': "Review chapter continuity, motivation, and pacing", 'ru-RU': "Проверить связность главы, мотивацию и темп" },
+  'cmd.reviewPrompt': { 'zh-CN': "根据可查证的文字审阅指定范围。按优先级记录定位依据、问题和建议，区分推测与原文。范围：{args}", 'en-US': "Review the requested scope using verifiable text. Prioritize findings with evidence and suggestions, and distinguish inference from the source. Scope: {args}", 'ru-RU': "Проверь указанный материал по тексту. Расставь приоритеты, приведи обоснования и предложения, отдели выводы от источника. Материал: {args}" },
+  'cmd.recap': { 'zh-CN': "写作回顾", 'en-US': "Writing recap", 'ru-RU': "Итоги работы" },
+  'cmd.recapDesc': { 'zh-CN': "归纳已有情节、人物变化与待回收线索", 'en-US': "Summarize plot, character changes, and unresolved threads", 'ru-RU': "Подытожить события, изменения героев и открытые линии" },
+  'cmd.recapPrompt': { 'zh-CN': "概括指定范围内已发生的事件、人物变化和未回收线索，附上章节或资料来源。范围：{args}", 'en-US': "Summarize established events, character changes, and unresolved threads. Cite chapter numbers or source documents. Scope: {args}", 'ru-RU': "Кратко изложи установленные события, изменения героев и открытые линии. Укажи главы или источники. Материал: {args}" },
+  'cmd.currentContext': { 'zh-CN': "依据当前对话或已打开的项目；如无法确定范围，先询问作者。", 'en-US': "Use the current conversation or open project. Ask the author if the scope is unclear.", 'ru-RU': "Опирайся на текущий диалог или открытый проект. Уточни границы, если они неясны." },
   'tool.draftReadonly': { 'zh-CN': '数据库草稿已定稿，不能由 Agent 直接修改', 'en-US': 'This database draft is finalized and cannot be edited by the Agent', 'ru-RU': 'Этот черновик финализирован и не может быть изменён Agent' },
   'tool.draftNotFound': { 'zh-CN': '数据库草稿不存在', 'en-US': 'Database draft not found', 'ru-RU': 'Черновик в базе не найден' },
   'tool.draftDirty': { 'zh-CN': '当前草稿有未保存的编辑，请先保存再让 Agent 修改', 'en-US': 'The open draft has unsaved edits; save it before the Agent edits it', 'ru-RU': 'В открытом черновике есть несохранённые правки; сохраните его перед изменением Agent' },

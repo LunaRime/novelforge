@@ -9,7 +9,7 @@ import { getAgentRuntimePorts } from './runtime-ports'
  */
 
 import { skillRegistry, type LoadedSkill } from './skill-registry'
-import { t } from '../../shared/locale'
+import { t, type TextKey } from '../../shared/locale'
 
 // ===== 类型定义 =====
 
@@ -25,6 +25,8 @@ export interface SlashCommand {
   source: 'builtin_command' | 'skill'
   /** 关联的 Skill（如有） */
   skill?: LoadedSkill
+  /** 需要作者先补充目标或范围的命令。 */
+  takesArgs?: boolean
 }
 
 /** @ 提及目标 */
@@ -50,6 +52,12 @@ export interface ParsedMention {
 }
 
 // ===== / 命令管理 =====
+
+export const writingSlashCommands = {
+  plan: { label: 'cmd.plan', description: 'cmd.planDesc', prompt: 'cmd.planPrompt' },
+  review: { label: 'cmd.review', description: 'cmd.reviewDesc', prompt: 'cmd.reviewPrompt' },
+  recap: { label: 'cmd.recap', description: 'cmd.recapDesc', prompt: 'cmd.recapPrompt' },
+} satisfies Record<string, { label: TextKey; description: TextKey; prompt: TextKey }>
 
 /** 获取内置 / 命令列表（动态计算以支持 i18n） */
 function getBuiltinCommands(): SlashCommand[] {
@@ -78,6 +86,9 @@ function getBuiltinCommands(): SlashCommand[] {
       description: t('cmd.projectStatusDesc'),
       source: 'builtin_command',
     },
+    ...Object.entries(writingSlashCommands).map(([name, entry]): SlashCommand => ({
+      name, displayName: t(entry.label), description: t(entry.description), source: 'builtin_command', takesArgs: true,
+    })),
   ]
 }
 
@@ -89,7 +100,7 @@ export function getAllSlashCommands(): SlashCommand[] {
 
   // 把所有 Skill 也注册为 / 命令
   for (const skill of skillRegistry.listAll()) {
-    if (skill.metadata.userInvocable !== false) {
+    if (skill.metadata.userInvocable !== false && !commands.some(command => command.name === skill.metadata.name)) {
       commands.push({
         name: skill.metadata.name,
         displayName: skill.metadata.displayName ?? skill.metadata.name,
@@ -135,7 +146,7 @@ export function parseSlashCommand(input: string): {
   }
 
   const withoutSlash = trimmed.slice(1)
-  const spaceIndex = withoutSlash.indexOf(' ')
+  const spaceIndex = withoutSlash.search(/\s/)
   const cmdName = spaceIndex > -1 ? withoutSlash.slice(0, spaceIndex) : withoutSlash
   const args = spaceIndex > -1 ? withoutSlash.slice(spaceIndex + 1).trim() : ''
 

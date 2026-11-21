@@ -20,6 +20,10 @@ import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { Badge } from '../../ui/Badge'
 import { MenuItem } from '../../ui/MenuItem'
+import MarkdownFormatMenu from '../../ui/MarkdownFormatMenu'
+import { formatTextarea } from '../../ui/markdown-format'
+import MarkdownContent from '../../ui/MarkdownContent'
+import { Button } from '../../ui/Button'
 import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
 import FilePickerMenu from './FilePickerMenu'
@@ -45,6 +49,7 @@ export default function AgentInputBox() {
 
 function AgentComposer() {
   const [inputText, setInputText] = useAgentComposerDraft()
+  const [previewFormat, setPreviewFormat] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { t } = useTranslation()
   // 原子 selector：action/原始值引用稳定，流式期间不随整 store 每 50ms 重渲染
@@ -121,8 +126,9 @@ function AgentComposer() {
   // 选择 / 命令
   const handleSlashSelect = useCallback((cmd: SlashCommand) => {
     setShowSlashMenu(false)
-    if (cmd.source === 'skill') {
-      // Skill 命令：替换为 /skill-name 后面可以加参数
+    setPreviewFormat(false)
+    if (cmd.source === 'skill' || cmd.takesArgs) {
+      // 带参数的命令先写入输入框，作者可以补充目标。
       setInputText(`/${cmd.name} `)
     } else {
       // 内置命令：直接发送
@@ -190,6 +196,7 @@ function AgentComposer() {
     }
     if (!inputText.trim()) return
     const text = inputText
+    setPreviewFormat(false)
     setInputText('')
     await sendMessage(text)
   }, [generating, inputText, sendMessage, cancelGeneration, setInputText])
@@ -225,6 +232,7 @@ function AgentComposer() {
           （三个菜单渲染在本容器内部，各自用 useFloatingPosition 算 fixed 坐标） */}
       <div className="relative w-full" ref={inputAreaRef}>
           <textarea
+            hidden={previewFormat && !!inputText.trim()}
             ref={textareaRef}
             value={inputText}
             onChange={e => handleInputChange(e.target.value)}
@@ -232,8 +240,9 @@ function AgentComposer() {
             placeholder={t('agent.placeholder')}
             aria-label={t('agent.placeholder')}
             rows={1}
-            className="nf-agent-composer-field block w-full resize-none bg-transparent px-2 py-2 text-xs leading-relaxed outline-none"
+            className="nf-agent-composer-field w-full resize-none bg-transparent px-2 py-2 text-xs leading-relaxed outline-none"
           />
+          {previewFormat && !!inputText.trim() && <div className="allow-select max-h-36 overflow-auto px-2 py-2 text-xs"><MarkdownContent content={inputText} document /></div>}
 
         {/* 三个辅助菜单：一律浮在整个窗口之上（useFloatingPosition 以输入区容器为锚点计算坐标） */}
         {showSlashMenu && (
@@ -269,6 +278,12 @@ function AgentComposer() {
         {/* 左侧工具按钮组 */}
         <div className="flex items-center gap-0.5 min-w-0 flex-1">
 
+          <MarkdownFormatMenu compact disabled={previewFormat && !!inputText.trim()} onFormat={format => {
+            if (textareaRef.current) formatTextarea(textareaRef.current, format)
+          }} />
+          {!!inputText.trim() && <Button type="button" variant="ghost" size="icon" className="shrink-0" aria-pressed={previewFormat}
+            aria-label={t(previewFormat ? 'action.edit' : 'editor.markdownPreview')} title={t(previewFormat ? 'action.edit' : 'editor.markdownPreview')}
+            onClick={() => setPreviewFormat(value => !value)}><FileText size={13} aria-hidden="true" /></Button>}
           {/* + 添加上下文（菜单必须包裹在 contextRef 内——否则点击菜单项时
               mousedown 被 useOutsideClick 判定为外部点击并卸载菜单，
               浏览器不再派发 click，菜单项 onClick 永不执行） */}
