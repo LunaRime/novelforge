@@ -4,6 +4,8 @@ import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
+import { SemanticLabel, type SemanticIconName } from '../ui/SemanticLabel'
+import MarkdownContent from '../ui/MarkdownContent'
 import { Disclosure } from '../ui/Disclosure'
 import AIActionDialog from './AIActionDialog'
 import { useProjectStore } from '../../stores/project-store'
@@ -28,7 +30,7 @@ type TFunc = (key: TextKey) => string
 
 function getSeverityMeta(t: TFunc): Record<ReviewIssue['severity'], {
   label: string
-  emoji: string
+  icon: SemanticIconName
   actionLabel: string
   colorClass: string
   bgClass: string
@@ -37,7 +39,7 @@ function getSeverityMeta(t: TFunc): Record<ReviewIssue['severity'], {
   return {
     error: {
       label: t('review.critical'),
-      emoji: '🔴',
+      icon: 'error',
       actionLabel: t('review.fixStrongly'),
       colorClass: 'text-[var(--color-error)]',
       bgClass: 'bg-[rgba(var(--color-error-rgb),0.1)]',
@@ -45,7 +47,7 @@ function getSeverityMeta(t: TFunc): Record<ReviewIssue['severity'], {
     },
     warning: {
       label: t('review.suggestion'),
-      emoji: '🟡',
+      icon: 'warning',
       actionLabel: t('review.fixOptional'),
       colorClass: 'text-[var(--color-warning)]',
       bgClass: 'bg-[rgba(var(--color-warning-rgb),0.1)]',
@@ -53,7 +55,7 @@ function getSeverityMeta(t: TFunc): Record<ReviewIssue['severity'], {
     },
     pass: {
       label: t('review.passed'),
-      emoji: '🟢',
+      icon: 'success',
       actionLabel: t('review.noAction'),
       colorClass: 'text-[var(--color-success)]',
       bgClass: 'bg-[rgba(var(--color-success-rgb),0.1)]',
@@ -140,16 +142,16 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber }: R
           <div className="flex items-center gap-3 text-xs ml-auto">
             {errorCount > 0 && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-[rgba(var(--color-error-rgb),0.2)] text-[var(--color-error)]">
-                🔴 {errorCount} {t('review.criticalCount')}
+                <SemanticLabel name="error">{errorCount} {t('review.criticalCount')}</SemanticLabel>
               </span>
             )}
             {warningCount > 0 && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-[rgba(var(--color-warning-rgb),0.2)] text-[var(--color-warning)]">
-                🟡 {warningCount} {t('review.suggestionCount')}
+                <SemanticLabel name="warning">{warningCount} {t('review.suggestionCount')}</SemanticLabel>
               </span>
             )}
             <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-[rgba(var(--color-success-rgb),0.2)] text-[var(--color-success)]">
-              🟢 {passCount} {t('review.passedCount')}
+              <SemanticLabel name="success">{passCount} {t('review.passedCount')}</SemanticLabel>
             </span>
             {/* 图例帮助按钮 */}
             <button
@@ -181,7 +183,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber }: R
                     'inline-flex items-center gap-1 px-2 py-0.5 rounded',
                     meta.bgClass, meta.colorClass
                   )}>
-                    {meta.emoji} {meta.label}
+                    <SemanticLabel name={meta.icon}>{meta.label}</SemanticLabel>
                   </span>
                   <span style={{ color: 'var(--color-text-secondary)' }}>
                     — {meta.actionLabel}
@@ -287,9 +289,9 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber }: R
         {/* 原始文本折叠 —— 2026-09-28 走查：折叠头统一走 ui/Disclosure（箭头/hover 底色/扩点击区/
             次级色四要素）；此前手写 summary 是 text-xs+muted，与说明文字同款、看不出可点 */}
         <Disclosure label={t('review.rawText')} className="mt-6">
-          <pre className="text-xs whitespace-pre-wrap font-mono leading-5 text-[var(--color-text-secondary)] bg-[var(--color-sidebar)] rounded-md p-3 border border-[var(--color-border)]">
-            {reportText}
-          </pre>
+          <div className="text-xs text-[var(--color-text-secondary)] bg-[var(--color-sidebar)] rounded-md p-3 border border-[var(--color-border)]">
+            <MarkdownContent content={reportText} document />
+          </div>
         </Disclosure>
 
         {/* 🔧 根据审稿意见修稿 — 核心循环入口 */}

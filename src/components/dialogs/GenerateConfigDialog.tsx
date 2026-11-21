@@ -119,7 +119,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, config, isConfig
       if (!alive.current) return
       assertCurrent()
       onClose()
-      toast.info('✨ ' + t('genConfig.generating'))
+      toast.info(t('genConfig.generating'))
       addLog('info', t('genConfig.generatingLog').replace('{totalChapters}', String(totalChapters)).replace('{wordsPerChapter}', String(wordsPerChapter)))
     } catch (error) {
       if (!alive.current || error instanceof NovelConfigRequestCancelled) return

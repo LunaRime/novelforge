@@ -5,6 +5,7 @@ import {
   Database, RefreshCw, BookOpen, Download, SortAsc, Search, Trash2, AlertCircle, Sparkles,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
+import MarkdownContent from '../ui/MarkdownContent'
 import { EmptyState } from '../ui/EmptyState'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
@@ -232,8 +233,8 @@ function KnowledgePanelContent({ source, headerAction }: { source: { id: string;
             <div className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
               {summaryDoc ? (titleMap[summaryDoc.id] || summaryDoc.fileName) : ''}
             </div>
-            <div className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
-              {summarizing ? t('knowledge.summarizing') : summaryText}
+            <div className="text-sm text-[var(--color-text-secondary)]">
+              {summarizing ? t('knowledge.summarizing') : <MarkdownContent content={summaryText} document />}
             </div>
           </div>
         </DialogContent>

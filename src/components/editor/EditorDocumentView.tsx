@@ -12,6 +12,7 @@ import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useMemoryStore } from '../../stores/memory-store'
 import { clearChapterTitleCache } from '../panels/Sidebar'
 import { Button } from '../ui/Button'
+import MarkdownContent from '../ui/MarkdownContent'
 import { confirm } from '../ui/Confirm'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
@@ -263,13 +264,8 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
         <NovelConfigEditor />
       )}
       {activeTab?.type === 'outline' && (
-        <div className="h-full overflow-y-auto p-6">
-          <pre
-            className="text-sm whitespace-pre-wrap font-mono leading-6"
-            style={{ color: 'var(--color-text)' }}
-          >
-            {activeTab.content || t('status.loading')}
-          </pre>
+        <div className="h-full w-full overflow-y-auto p-6 text-sm">
+          <MarkdownContent content={activeTab.content || t('status.loading')} document />
         </div>
       )}
       {activeTab?.type === 'character' && (
@@ -307,10 +303,8 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
       {activeTab?.type === 'publication' && (
         /* 平台章节正文（连载监控）：只读整幅展示 —— 正文随 db:publication-list 已返回，
            侧栏行点击只做导航（与记忆文件同一约定：编辑器是唯一查看面） */
-        <div className="h-full overflow-y-auto p-6">
-          <div className="text-sm leading-7 whitespace-pre-wrap" style={{ color: 'var(--color-text)' }}>
-            {activeTab.content || ''}
-          </div>
+        <div className="h-full w-full overflow-y-auto p-6 text-sm">
+          <MarkdownContent content={activeTab.content || ''} document />
         </div>
       )}
       {/* diff 合并视图 — 统一使用弹出式 Dialog（与 DraftEditor 一致） */}
@@ -359,7 +353,7 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
 
                     assertProject()
                     if (result.success) {
-                      toast.success('✅ ' + t('editor.mergeComplete'))
+                      toast.success(t('editor.mergeComplete'))
                       renderLog('info', 'Save:Draft', t('editor.mergeComplete'))
                       if (result.refreshError) renderLog('error', 'Load:Draft', result.refreshError)
                       useEditorStore.getState().closeTab(activeTab.id)

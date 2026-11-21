@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Save, RefreshCw, Sparkles, AlertTriangle, FileText } from 'lucide-react'
+import { Save, RefreshCw, Sparkles, AlertTriangle, FileText, Eye, Pencil } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { renderIcon } from '../panels/sidebar/SidebarShared'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -7,6 +7,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { useEditorStore } from '../../stores/editor-store'
 import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
 import { Button } from '../ui/Button'
+import MarkdownContent from '../ui/MarkdownContent'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import { renderLog } from '../../services/render-logger'
@@ -43,8 +44,7 @@ interface Props {
 }
 
 /**
- * 架构文件编辑器（Markdown 文件 WYSIWYG 编辑）
- * - 使用 CodeMirrorEditor（document 模式）+ hideStatusBar，底部栏信息整合到本组件工具栏
+ * 架构文件默认展示排版，源文编辑使用 CodeMirror。
  * - 脏状态通过比较内容字符串判断，不依赖 onChange 时机
  */
 export default function ArchFileViewer({ filePath, content: initialContent }: Props) {
@@ -75,6 +75,8 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
   const generationRun = useRef<string | null>(null)
   const extractionRun = useRef<string | null>(null)
   const [editorContent, setEditorContent] = useState(initialContent)
+  const [previewContent, setPreviewContent] = useState(initialContent)
+  const [editing, setEditing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
@@ -104,7 +106,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
     if (initialContent !== savedContentRef.current) {
       editVersion.current++; reloadVersion.current++
       savedContentRef.current = initialContent; currentContentRef.current = initialContent
-      setEditorContent(initialContent); setIsDirty(false); setLoading(false)
+      setEditorContent(initialContent); setPreviewContent(initialContent); setIsDirty(false); setLoading(false)
     }
   }, [initialContent])
 
@@ -112,6 +114,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
     if (!mounted.current || (source && !active())) return
     editVersion.current++
     currentContentRef.current = md
+    setPreviewContent(md)
     const dirty = md !== savedContentRef.current
     setIsDirty(dirty)
     if (dirty) useEditorStore.getState().updateTabContent(filePath, md)
@@ -160,7 +163,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
       if (!active() || version !== reloadVersion.current || editing !== editVersion.current || saveBusy.current) return
       if (result.status === 'missing') throw new Error(t('tool.readFileFailed'))
       savedContentRef.current = result.content; currentContentRef.current = result.content
-      setEditorContent(result.content); setIsDirty(false)
+      setEditorContent(result.content); setPreviewContent(result.content); setIsDirty(false)
       useEditorStore.getState().syncTabContent(filePath, result.content)
       useEditorStore.getState().markTabSaved(filePath)
     } catch (error) {
@@ -246,13 +249,13 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
     <div className="h-full flex flex-col overflow-hidden">
       {/* 工具栏（背景与编辑区一致，内嵌在内容区中而非独立标题栏） */}
       <div
-        className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
+        className="flex min-h-9 flex-wrap items-center justify-between gap-2 px-3 py-1 flex-shrink-0"
         style={{
           borderBottom: '1px solid var(--color-border)',
           backgroundColor: 'var(--color-editor-bg)',
         }}
       >
-        {/* 左侧：Emoji + 标题 + 描述 */}
+        {/* 左侧：图标、标题和描述 */}
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>{meta ? renderIcon(meta.iconName, 14) : <FileText size={14} />}</span>
           <span className="text-xs font-medium flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
@@ -266,7 +269,12 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
         </div>
 
         {/* 右侧：字数 + 状态 + 操作按钮 */}
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
+
+          <Button type="button" variant="ghost" size="sm" onClick={() => setEditing(value => !value)}>
+            {editing ? <Eye size={14} /> : <Pencil size={14} />}
+            {t(editing ? 'editor.markdownPreview' : 'action.edit')}
+          </Button>
 
           {/* 字数 */}
           {charCount > 0 && (
@@ -314,7 +322,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
               size="sm"
               disabled={extracting}
               onClick={handleExtractCharacters}
-              className="gap-1.5 bg-gradient-to-r from-[var(--color-error)] to-[var(--color-warning)] text-white shadow-[var(--shadow-sm)] hover:brightness-90 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
+              variant="outline"
               title={t('arch.charExtractFailed')}
             >
               {extracting
@@ -341,8 +349,16 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
         </div>
       </div>
 
-      {/* CodeMirrorEditor document 模式，隐藏底部栏（信息已整合到上方工具栏） */}
-      <div className="flex-1 overflow-hidden">
+      {!editing && (
+        <div className="min-h-0 flex-1 overflow-auto bg-[var(--color-editor-bg)] px-5 py-6">
+          <div className="mx-auto max-w-3xl text-sm">
+            {previewContent.trim() ? <MarkdownContent content={previewContent} document />
+              : <p className="text-[var(--color-text-muted)]">{t('arch.emptyHint')}</p>}
+          </div>
+        </div>
+      )}
+      {/* 切换到预览时保留编辑器实例、草稿内容和撤销历史。 */}
+      <div hidden={!editing} className="min-h-0 flex-1 overflow-hidden">
         <CodeMirrorEditor
           mode="document"
           content={editorContent}

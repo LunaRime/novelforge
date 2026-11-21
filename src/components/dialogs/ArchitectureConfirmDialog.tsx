@@ -9,6 +9,7 @@ import {
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
+import { SemanticLabel } from '../ui/SemanticLabel'
 import { cn } from '../../lib/utils'
 import { Textarea } from '../ui/Textarea'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -304,7 +305,7 @@ export default function ArchitectureConfirmDialog({
 
           {noneSelected && (
             <p className="text-xs px-3 py-2 rounded-md" style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.1)', borderColor: 'rgba(var(--color-error-rgb), 0.2)', borderWidth: 1, color: 'var(--color-error)' }}>
-              ⚠️ {t('error.selectStep')}
+              <SemanticLabel name="warning">{t('error.selectStep')}</SemanticLabel>
             </p>
           )}
           {/* 前置校验失败提示 */}

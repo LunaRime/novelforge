@@ -6,6 +6,7 @@ import { inferFileImport, inferFileImportBlueprints, type FileImportBlueprintInf
 import type { FileAgentEditProposal, FileDraftCommand, FileImportChapter, FileImportSettingField, ProjectChannels } from '../../shared/ipc-channels'
 import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
+import MarkdownContent from '../ui/MarkdownContent'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
 import { VersionActions, type VersionAction } from '../editor/VersionActions'
@@ -495,7 +496,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               </Button>
               <textarea aria-label={t('project.fileEditorBody')} rows={10} readOnly value={text}
                 className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3" />
-              {preview && <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border border-[var(--color-border)] p-3">{preview.content}</pre>}
+              {preview && <div className="max-h-48 overflow-auto rounded border border-[var(--color-border)] p-3"><MarkdownContent content={preview.content} document /></div>}
             </div>
           )}
           {workspace && !recovery && (
@@ -545,7 +546,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                       {settingsOffer?.occupied.includes(field) && <p className="text-sm">{t('project.fileEditorSettingOccupied')}</p>}
                       {!settingsOffer?.available.includes(field) && <p className="text-sm">{t('project.fileEditorSettingPreviewOnly')}</p>}
                       {inferencePreview.applied?.includes(field) && <p className="text-sm">{t('project.fileEditorSettingApplied')}</p>}
-                      <p className="whitespace-pre-wrap break-words text-sm">{inferencePreview.values[field]}</p>
+                      <div className="text-sm"><MarkdownContent content={inferencePreview.values[field] ?? ""} document /></div>
                     </div>
                   ))}
                   {canApplySettings && (
@@ -650,7 +651,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                       <Button variant="outline" disabled={busy || dirty} onClick={() => void previewRevision()}>{t('project.fileEditorPreview')}</Button>
                     </div>
                   )}
-                  {preview && <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border border-[var(--color-border)] p-3">{preview.content}</pre>}
+                  {preview && <div className="max-h-48 overflow-auto rounded border border-[var(--color-border)] p-3"><MarkdownContent content={preview.content} document /></div>}
                   <VersionActions actions={([
                     { enabled: Boolean(preview), label: 'project.fileEditorMerge', kind: 'merge' },
                     { enabled: lifecycle.canFinalize, label: 'project.fileEditorFinalize', kind: 'finalize' },
