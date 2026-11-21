@@ -393,6 +393,8 @@ export const projectTexts = {
   'usage.activityTitle': { 'zh-CN': '活跃度', 'en-US': 'Activity', 'ru-RU': 'Активность' },
   'usage.recentSessions': { 'zh-CN': '最近会话', 'en-US': 'Recent sessions', 'ru-RU': 'Недавние сессии' },
   'usage.purposeDistribution': { 'zh-CN': '用途分布', 'en-US': 'Usage by purpose', 'ru-RU': 'Распределение по назначению' },
+  'usage.chartCost': { 'zh-CN': "费用 USD", 'en-US': "Cost (USD)", 'ru-RU': "Расходы (USD)" },
+  'usage.chartTrend': { 'zh-CN': "每日用量柱状图", 'en-US': "Daily usage bar chart", 'ru-RU': "Столбчатая диаграмма по дням" },
   'usage.modelDistribution': { 'zh-CN': '模型分布', 'en-US': 'Usage by model', 'ru-RU': 'Распределение по моделям' },
   'usage.noSessions': { 'zh-CN': '该时间段内暂无会话', 'en-US': 'No sessions in this period', 'ru-RU': 'В этом периоде нет сессий' },
   'usage.other': { 'zh-CN': '其它', 'en-US': 'Other', 'ru-RU': 'Другое' },

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  AlertTriangle, BarChart3, Braces, CalendarDays, Clock3, Coins, Cpu, Database, FolderOpen,
-  Gauge, Grid2X2, MessageSquare, MessagesSquare, Palette, RefreshCw, Target,
+  AlertTriangle, BarChart3, Braces, Clock3, Coins, Cpu, Database, FolderOpen,
+  Gauge, Grid2X2, MessageSquare, MessagesSquare, Palette, PieChart, RefreshCw, Target,
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { Table } from '../ui/Table'
@@ -16,6 +16,7 @@ import type {
 import { useTranslation } from '../../hooks/useTranslation'
 import { FilterButtons, ViewTabs } from '../ui/ChoiceControls'
 import { useLayoutStore } from '../../stores/layout-store'
+import './usage-charts.css'
 
 type UsageView = 'current' | 'global'
 type RangeDays = 1 | 7 | 30 | 0
@@ -177,9 +178,21 @@ export default function UsageStatsView() {
     ]
   }, [data?.byPurpose, t])
 
-  const daily7 = data?.daily.slice(-7) ?? []
-  const maxDailyTokens = Math.max(1, ...daily7.map(row => row.tokens))
-  const maxDailyCost = Math.max(0.0001, ...daily7.map(row => row.cost))
+  const [trendMetric, setTrendMetric] = useState<'tokens' | 'cost'>('tokens')
+  // 补齐缺少调用记录的日期，仍遵守当前筛选范围与同一组纵轴刻度。
+  const daily = useMemo(() => {
+    const recorded = new Map((data?.daily ?? []).map(row => [row.day, row]))
+    return Array.from({ length: rangeDays === 1 ? 1 : 7 }, (_, index) => {
+      const days = rangeDays === 1 ? 1 : 7
+      const date = new Date(rangeEnd)
+      date.setDate(date.getDate() - (days - 1 - index))
+      const day = dayKey(date)
+      return recorded.get(day) ?? { day, tokens: 0, cost: 0 }
+    })
+  }, [data?.daily, rangeDays, rangeEnd])
+  const maxDaily = Math.max(0, ...daily.map(row => row[trendMetric]))
+  const trendFormat = trendMetric === 'cost' ? (value: number) => value > 0 && value < 0.01 ? `$${value.toPrecision(2)}` : formatCost(value) : formatCompact
+
   const heatmap = useMemo(() => {
     const byDay = new Map((data?.daily ?? []).map(row => [row.day, row.calls]))
     const result: Array<{ day: string; calls: number }> = []
@@ -263,42 +276,43 @@ export default function UsageStatsView() {
             <StatCard icon={<Clock3 size={16} />} label={t('usage.activeTime')} value={formatDuration(totals.durationMs)} sub={t('usage.perCall').replace('{n}', formatDuration(totals.calls > 0 ? totals.durationMs / totals.calls : 0))} />
           </div>
 
-          {/* 近 7 天 */}
           <SectionCard
-            title={t('usage.last7Days')}
-            icon={<CalendarDays size={15} />}
-            action={<span className="flex items-center gap-1.5 text-micro text-[var(--color-text-secondary)]"><Gauge size={13} aria-hidden="true" />{t('usage.outputSpeed').replace('{n}', outputSpeed.toFixed(1))}</span>}
+            title={t(rangeDays === 1 ? 'usage.rangeToday' : 'usage.last7Days')}
+            icon={<BarChart3 size={16} />}
+            action={<FilterButtons size="sm" value={trendMetric} onChange={setTrendMetric} items={[
+              { value: 'tokens', label: t('usage.tokenUnit') },
+              { value: 'cost', label: t('usage.chartCost') },
+            ]} />}
           >
-            <div className="flex h-[148px] items-end gap-2">
-              {daily7.length === 0 ? (
-                <div className="flex h-full w-full items-center justify-center text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('usage.noData')}</div>
-              ) : daily7.map(row => (
-                <div key={row.day} className="flex min-w-0 flex-1 flex-col items-center gap-1">
-                  <div className="flex h-[118px] items-end justify-center gap-0.5">
-                    <div
-                      className="w-2 rounded-t"
-                      title={`${formatNumber(row.tokens)} ${t('usage.tokenUnit')}`}
-                      style={{ height: `${Math.max(row.tokens > 0 ? 3 : 0, (row.tokens / maxDailyTokens) * 100)}%`, backgroundColor: 'var(--color-accent)' }}
-                    />
-                    <div
-                      className="w-1.5 rounded-t"
-                      title={formatCost(row.cost)}
-                      style={{ height: `${Math.max(row.cost > 0 ? 3 : 0, (row.cost / maxDailyCost) * 100)}%`, backgroundColor: 'var(--color-success)' }}
-                    />
+            <div className="nf-usage-trend" role="group" aria-label={t('usage.chartTrend')}>
+              <div className="nf-usage-chart-axis" aria-hidden="true">
+                {[1, 0.5, 0].map(fraction => <span key={fraction}>{trendFormat(maxDaily * fraction)}</span>)}
+              </div>
+              <div className="nf-usage-chart-area">
+                <div className="nf-usage-chart-guides" aria-hidden="true"><span /><span /><span /></div>
+                {daily.map(row => {
+                  const value = row[trendMetric]
+                  return <div key={row.day} className="nf-usage-chart-column">
+                    <div className="nf-usage-chart-plot">
+                      <div className="nf-usage-chart-bar" data-empty={!value || undefined}
+                        style={{ height: value ? `${(value / maxDaily) * 100}%` : undefined }}
+                        title={`${row.day} · ${trendFormat(value)}`}>
+                        <span className="sr-only">{row.day} {trendFormat(value)}</span>
+                      </div>
+                    </div>
+                    <span aria-hidden="true">{formatDay(row.day)}</span>
                   </div>
-                  <span className="text-micro tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{formatDay(row.day)}</span>
-                </div>
-              ))}
+                })}
+              </div>
             </div>
-            <div className="mt-2 flex items-center gap-3 text-micro" style={{ color: 'var(--color-text-muted)' }}>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ backgroundColor: 'var(--color-accent)' }} />{t('usage.tokenUnit')}</span>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ backgroundColor: 'var(--color-success)' }} />USD</span>
+            <div className="mt-2 flex items-center gap-1.5 text-micro text-[var(--color-text-secondary)]">
+              <Gauge size={13} aria-hidden="true" />{t('usage.outputSpeed').replace('{n}', outputSpeed.toFixed(1))}
             </div>
           </SectionCard>
 
           {/* Token / 耗时 */}
           <div className="grid gap-3 xl:grid-cols-2">
-            <SectionCard title={t('usage.tokenStats')} icon={<Braces size={15} />}>
+            <SectionCard title={t('usage.tokenStats')} icon={<PieChart size={15} />}>
               <DonutPanel
                 segments={tokenSegments}
                 centerValue={formatCompact(totals.tokens)}
@@ -314,6 +328,7 @@ export default function UsageStatsView() {
                 segments={durationSegments}
                 centerValue={formatDuration(totals.durationMs)}
                 centerLabel={t('usage.activeTime')}
+                format={formatDuration}
               />
             </SectionCard>
           </div>
@@ -455,16 +470,18 @@ function SectionCard({ title, icon, action, children }: { title: string; icon: R
 
 interface DonutSegment { label: string; value: number; color: string }
 
-function DonutPanel({ segments, centerValue, centerLabel }: { segments: DonutSegment[]; centerValue: string; centerLabel: string }) {
+function DonutPanel({ segments, centerValue, centerLabel, format = formatCompact }: { segments: DonutSegment[]; centerValue: string; centerLabel: string; format?: (value: number) => string }) {
+  const total = segments.reduce((sum, segment) => sum + segment.value, 0)
   return (
-    <div className="flex items-center gap-4">
+    <div className="nf-usage-donut-panel">
       <Donut segments={segments} centerValue={centerValue} centerLabel={centerLabel} />
-      <div className="min-w-0 flex-1 space-y-1.5">
+      <div className="nf-usage-donut-legend">
         {segments.length === 0 ? null : segments.map(segment => (
           <div key={segment.label} className="flex items-center gap-1.5 text-micro">
             <span className="h-2 w-2 flex-shrink-0 rounded-full" style={{ backgroundColor: segment.color }} />
-            <span className="min-w-0 flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>{segment.label}</span>
-            <span className="flex-shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{formatCompact(segment.value)}</span>
+            <span className="min-w-0 flex-1 truncate" title={segment.label} style={{ color: 'var(--color-text-secondary)' }}>{segment.label}</span>
+            <span className="flex-shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{format(segment.value)}</span>
+            <span className="nf-usage-donut-share">{new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 }).format(segment.value / total)}</span>
           </div>
         ))}
       </div>
@@ -479,7 +496,7 @@ function Donut({ segments, centerValue, centerLabel }: { segments: DonutSegment[
   let offset = 0
   return (
     <div className="relative h-[116px] w-[116px] flex-shrink-0">
-      <svg viewBox="0 0 116 116" className="h-full w-full -rotate-90">
+      <svg aria-hidden="true" viewBox="0 0 116 116" className="h-full w-full -rotate-90">
         <circle cx="58" cy="58" r={radius} fill="none" stroke="var(--color-hover)" strokeWidth="14" />
         {total > 0 && segments.map(segment => {
           const length = (segment.value / total) * circumference
