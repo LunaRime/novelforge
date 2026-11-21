@@ -138,25 +138,26 @@ function paragraphVisuals(highlight: boolean) {
  * 打字机滚动：输入/移动光标后把光标所在行拉到视口垂直 40%。
  *
  * 只在编辑器已有焦点时执行——初次挂载、鼠标滚轮浏览时不应被强行拉回。
- * 选区内拖动（非折叠）同样按光标头定位，符合「光标保持 40%」的规范。
+ * 鼠标选区变化交给 CodeMirror 的边缘滚动，保持指针与文本的相对位置。
  */
 function typewriterScroll() {
   return ViewPlugin.fromClass(class {
     private frame = 0
-    constructor(view: EditorView) {
-      this.schedule(view)
-    }
     update(update: ViewUpdate) {
-      if (update.selectionSet || update.docChanged) this.schedule(update.view)
+      if (!update.selectionSet && !update.docChanged) return
+      if (this.frame) cancelAnimationFrame(this.frame)
+      this.frame = 0
+      if (update.transactions.some(transaction => transaction.isUserEvent('select.pointer'))) return
+      this.schedule(update.view)
     }
     destroy() {
       if (this.frame) cancelAnimationFrame(this.frame)
     }
     private schedule(view: EditorView) {
-      if (!view.hasFocus || view.composing) return
-      if (this.frame) cancelAnimationFrame(this.frame)
+      if (!view.hasFocus || view.composing || !view.state.selection.main.empty) return
       this.frame = requestAnimationFrame(() => {
         this.frame = 0
+        if (!view.hasFocus || view.composing || !view.state.selection.main.empty) return
         const head = view.state.selection.main.head
         const coords = view.coordsAtPos(head)
         if (!coords) return
@@ -872,16 +873,14 @@ export default function CodeMirrorEditor({
       boxSizing: 'border-box',
       lineHeight: "1.8",
       color: "var(--color-text)",
+      caretColor: "var(--color-accent)",
       // 段间距 1em（由段落末行 decoration 实现，不影响段内折行）
       fontSize: "inherit",
     },
     "&.cm-focused": { outline: "none" },
-    ".cm-cursor": { borderLeftColor: "var(--color-accent)", borderLeftWidth: "2px" },
     ".cm-activeLine": { backgroundColor: "transparent" },
-    // CodeMirror 默认在文字下方绘制选区。稿纸有实体底色，选区需在同一滚动容器内浮到稿纸上。
-    ".cm-selectionLayer": { zIndex: "0 !important", pointerEvents: "none" },
-    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-editor-selection, var(--color-hover)) !important" },
-    ".cm-selectionMatch": { backgroundColor: "color-mix(in srgb, var(--color-accent) 12%, transparent)" },
+    // 原生选区沿文字绘制，在折行时保留稿纸两侧的留白。
+    ".cm-content::selection, .cm-content ::selection": { backgroundColor: "var(--color-editor-selection)" },
     ".cm-line": { padding: "0", transition: "opacity 140ms ease, background-color 140ms ease" },
     ".cm-line.cm-paragraph-end": { paddingBottom: "1em" },
     ".cm-line.cm-focus-paragraph": {
@@ -1138,6 +1137,8 @@ export default function CodeMirrorEditor({
     foldGutter: false,
     dropCursor: false,
     allowMultipleSelections: false,
+    drawSelection: false,
+    highlightSelectionMatches: false,
     indentOnInput: false,
     highlightActiveLine: false,
     highlightActiveLineGutter: false,

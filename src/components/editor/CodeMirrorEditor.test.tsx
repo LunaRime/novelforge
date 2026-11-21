@@ -128,6 +128,29 @@ it('左键拖出选区后打开草稿工具栏，可加下划线并撤销', asyn
   }
 })
 
+it('鼠标选区暂停打字机定位，键盘光标仍可居中', async () => {
+  const preference = useEditorPrefsStore.getState().typewriter
+  useEditorPrefsStore.setState({ typewriter: true })
+  const { container } = renderEditor('选中文字，其余正文。', undefined, { mode: 'prose' })
+  const view = getView(container)
+  const coords = vi.spyOn(view, 'coordsAtPos').mockReturnValue({ left: 80, right: 90, top: 180, bottom: 200 })
+  try {
+    act(() => {
+      view.focus()
+      view.dispatch({ selection: { anchor: 0, head: 4 }, userEvent: 'select.pointer' })
+    })
+    await act(() => new Promise(requestAnimationFrame))
+    expect(view.scrollDOM.scrollTop).toBe(0)
+
+    act(() => view.dispatch({ selection: { anchor: 5 }, userEvent: 'select.keyboard' }))
+    await act(() => new Promise(requestAnimationFrame))
+    expect(view.scrollDOM.scrollTop).toBeGreaterThan(0)
+  } finally {
+    coords.mockRestore()
+    useEditorPrefsStore.setState({ typewriter: preference })
+  }
+})
+
 it('右键不覆盖左键选区，也不拦截系统菜单', () => {
   const { container } = renderEditor('上下文里的选中文段。', undefined, { mode: 'prose', filePath: 'vela://draft/1' })
   const view = getView(container)
