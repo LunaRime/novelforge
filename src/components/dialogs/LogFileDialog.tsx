@@ -1,291 +1,220 @@
-/**
- * LogFileDialog — 日志文件查看器（精准定位问题）
- *
- * 双环境日志流可视化：
- * - 环境切换：开发（dev/内测）/ 发布（公测/正式），默认选中当前应用环境
- * - 文件列表：名称 + 大小 + 日期（新→旧）
- * - 内容区：等宽只读，尾部 maxLines 截断（防大文件卡 UI），显示总行数
- * - 工具栏：刷新 / 复制 / 在文件管理器中打开日志目录
- */
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { RefreshCw, Copy, Check, FolderOpen, FileText, ArrowUp, ArrowDown } from 'lucide-react'
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
-} from '../ui/Dialog'
-import { Button } from '../ui/Button'
-import { EmptyState } from '../ui/EmptyState'
-import { t, getCurrentLocale } from '../../shared/locale'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CalendarDays, Check, ChevronRight, Copy, FileText, FolderOpen, ListEnd, ListStart, RefreshCw, ScrollText, Search } from 'lucide-react'
+import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
-import { FilterButtons } from '../ui/ChoiceControls'
 import { getCurrentLogEnv } from '../../services/render-logger'
 import type { LogEnvMode, LogFileInfo } from '../../shared/ipc-channels'
+import { SortDirectionIcon } from '../ui/ActionIcons'
+import { Button } from '../ui/Button'
+import { FilterButtons } from '../ui/ChoiceControls'
+import CountBadge from '../ui/CountBadge'
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/Dialog'
+import { EmptyState } from '../ui/EmptyState'
+import { Input } from '../ui/Input'
+import { Spinner } from '../ui/Spinner'
+import { toast } from '../ui/Toast'
+import './log-file-dialog.css'
 
-/** 内容区最多显示尾部行数 */
-const MAX_CONTENT_LINES = 2000
+const MAX_LINES = 2000
+const LEVEL_KEYS = { DEBUG: 'log.levelDebug', INFO: 'log.filterInfo', WARN: 'log.filterWarn', ERROR: 'log.filterError' } as const
+type Level = keyof typeof LEVEL_KEYS
+type LogRecord = { id: number; time?: string; timestamp: number; level?: Level; source?: string; raw: string; message: string }
 
-function formatSize(bytes: number): string {
+/** 将堆栈续行留在所属记录内，倒序和搜索时仍能完整阅读。 */
+function parseRecords(text: string): LogRecord[] {
+  const records: LogRecord[] = []
+  for (const line of text.trimEnd().split(/\r?\n/)) {
+    if (!line && records.length === 0) continue
+    const match = /^\[(\d{4}-\d{2}-\d{2}T[^\]]+)\] \[(DEBUG|INFO|WARN|ERROR)\s*\] \[([^\]]+)\] (.*)$/.exec(line)
+    if (match) {
+      records.push({ id: records.length, time: match[1], timestamp: Date.parse(match[1]) || 0, level: match[2] as Level, source: match[3], message: match[4], raw: line })
+    } else {
+      const last = records.at(-1)
+      if (last) { last.raw += '\n' + line; last.message += '\n' + line }
+      else records.push({ id: 0, timestamp: 0, message: line, raw: line })
+    }
+  }
+  return records
+}
+
+function sizeLabel(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`
 }
 
-function formatDate(mtime: number): string {
-  if (!mtime) return ''
-  return new Date(mtime).toLocaleString(getCurrentLocale(), {
-    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-  })
-}
+type FileContent = { success: boolean; content?: string; totalLines?: number; error?: string }
 
-/** 解析日志行首 ISO 时间戳（logger 文件格式 `[2026-08-07T14:30:01.123Z] [INFO ] [source] msg`）；解析失败返回 -Infinity */
-function parseLogLineTs(line: string): number {
-  const m = line.match(/^\[([^\]]+)\]/)
-  if (!m) return -Infinity
-  const ts = Date.parse(m[1])
-  return Number.isNaN(ts) ? -Infinity : ts
-}
-
-interface LogFileDialogProps {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-}
-
-export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps) {
-  const [env, setEnv] = useState<LogEnvMode>(() => getCurrentLogEnv())
-  const [envFiles, setEnvFiles] = useState<Array<{ env: LogEnvMode; files: LogFileInfo[] }>>([])
-  const [selected, setSelected] = useState<LogFileInfo | null>(null)
-  const [content, setContent] = useState('')
-  const [totalLines, setTotalLines] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [loadError, setLoadError] = useState('')
+export default function LogFileDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t, locale } = useTranslation()
+  const [env, setEnv] = useState<LogEnvMode>(getCurrentLogEnv)
+  const [groups, setGroups] = useState<Array<{ env: LogEnvMode; files: LogFileInfo[] }>>([])
+  const [fileName, setFileName] = useState('')
+  const [refresh, setRefresh] = useState(0)
+  const [listState, setListState] = useState<'loading' | 'ready' | 'failed'>('loading')
+  const [fileResult, setFileResult] = useState<{ key: string; data: FileContent }>()
+  const [query, setQuery] = useState('')
+  const [listAsc, setListAsc] = useState(false)
+  const [recordsAsc, setRecordsAsc] = useState(true)
   const [copied, setCopied] = useState(false)
-  /** 文件列表排序方向：false = 按 mtime 降序（新→旧，默认），true = 升序 */
-  const [listSortAsc, setListSortAsc] = useState(false)
-  /** 内容行排序方向：true = 按行首时间戳升序（文件原序，默认），false = 倒序（最新在上） */
-  const [contentSortAsc, setContentSortAsc] = useState(true)
-  const contentRef = useRef<HTMLPreElement>(null)
+  const scroll = useRef<HTMLDivElement>(null)
 
-  const currentFiles = useMemo(
-    () => envFiles.find(e => e.env === env)?.files ?? [],
-    [envFiles, env],
-  )
+  const newestFirst = useMemo(() => [...(groups.find(group => group.env === env)?.files ?? [])]
+    .sort((a, b) => b.mtime - a.mtime), [groups, env])
+  const files = listAsc ? [...newestFirst].reverse() : newestFirst
+  const selected = newestFirst.find(file => file.name === fileName) ?? newestFirst[0]
+  const selectedName = selected?.name
+  const key = selectedName ? JSON.stringify([env, selectedName, refresh]) : ''
+  const result = fileResult?.key === key ? fileResult?.data : undefined
+  const content = result?.success ? result.content ?? '' : ''
+  const search = query.trim().toLowerCase()
+  const records = useMemo(() => parseRecords(content).sort((a, b) => a.timestamp - b.timestamp), [content])
+  const visible = useMemo(() => {
+    const matches = records.filter(item => !search || item.raw.toLowerCase().includes(search))
+    return recordsAsc ? matches : matches.reverse()
+  }, [records, search, recordsAsc])
+  const date = useMemo(() => new Intl.DateTimeFormat(locale, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }), [locale])
+  const time = useMemo(() => new Intl.DateTimeFormat(locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' }), [locale])
 
-  /** 文件列表显式按 mtime 排序（不依赖主进程返回顺序；mtime 缺失排最后） */
-  const sortedFiles = useMemo(() => {
-    return [...currentFiles].sort((a, b) => {
-      const ka = a.mtime || 0
-      const kb = b.mtime || 0
-      return listSortAsc ? ka - kb : kb - ka
-    })
-  }, [currentFiles, listSortAsc])
-
-  /** 内容行按行首时间戳排序（升序=文件原序；无时间戳行稳定排最后） */
-  const displayedLines = useMemo(() => {
-    if (!content) return content
-    const lines = content.split('\n')
-    if (contentSortAsc) return content
-    const withTs = lines.map(line => ({ line, ts: parseLogLineTs(line) }))
-    withTs.sort((a, b) => {
-      // 无时间戳行(空行/堆栈续行)key=Infinity——升降序都排最后
-      const ka = a.ts === -Infinity ? Infinity : a.ts
-      const kb = b.ts === -Infinity ? Infinity : b.ts
-      return kb - ka
-    })
-    return withTs.map(x => x.line).join('\n')
-  }, [content, contentSortAsc])
-
-  /** 加载两环境文件列表 */
-  const loadFiles = useCallback(async () => {
-    try {
-      const list = await ipc.invoke('log:list-files')
-      setEnvFiles(list)
-    } catch {
-      setEnvFiles([])
-    }
-  }, [])
-
-  // 打开对话框时加载文件列表
   useEffect(() => {
     if (!open) return
-    // setState 放入微任务（项目惯例：effect 内同步 setState 被 ESLint 拦截）
-    Promise.resolve().then(loadFiles)
-  }, [open, loadFiles])
+    let stale = false
+    void ipc.invoke('log:list-files').then(response => {
+      if (!stale) { setGroups(response); setListState('ready') }
+    }).catch(() => { if (!stale) setListState('failed') })
+    return () => { stale = true }
+  }, [open, refresh])
 
-  // 选中文件有效性：环境切换 / 文件列表刷新后，若当前选中不在列表中则回退到第一个（最新）文件；
-  // 手动选中的文件在刷新后保留（不重置用户选择）
   useEffect(() => {
-    const files = envFiles.find(e => e.env === env)?.files ?? []
-    Promise.resolve().then(() => {
-      if (files.length > 0) {
-        if (!selected || !files.some(f => f.name === selected.name)) {
-          setSelected(sortedFiles[0] ?? files[0])
-        }
-      } else {
-        setSelected(null)
-        setContent('')
-      }
-    })
-  }, [env, envFiles, selected, sortedFiles])
+    if (!open || !selectedName) return
+    let stale = false
+    void ipc.invoke('log:read-file', env, selectedName, MAX_LINES)
+      .then(data => { if (!stale) setFileResult({ key, data }) })
+      .catch(() => { if (!stale) setFileResult({ key, data: { success: false } }) })
+    return () => { stale = true }
+  }, [open, env, selectedName, key])
 
-  // 选中文件 → 加载内容（尾部截断）
   useEffect(() => {
-    if (!selected) return
-    let cancelled = false
-    // 异步标记 loading + 清错误（项目惯例：effect 内同步 setState 被 ESLint 拦截）
-    Promise.resolve().then(() => {
-      if (cancelled) return
-      setLoading(true)
-      setLoadError('')
-    })
-    ipc.invoke('log:read-file', selected.env, selected.name, MAX_CONTENT_LINES)
-      .then((res) => {
-        if (cancelled) return
-        if (res.success) {
-          setContent(res.content ?? '')
-          setTotalLines(res.totalLines ?? 0)
-        } else {
-          setLoadError(res.error ?? t('log.loadError'))
-        }
-      })
-      .catch(() => { if (!cancelled) setLoadError(t('log.loadError')) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [selected])
-
-  // 内容加载完成后滚动：正序回到底部（最新在下），倒序回到顶部（最新在上）
+    const pane = scroll.current
+    if (pane) pane.scrollTop = recordsAsc && !search ? pane.scrollHeight : 0
+  }, [result, recordsAsc, search])
   useEffect(() => {
-    if (contentRef.current && !loading) {
-      contentRef.current.scrollTop = contentSortAsc ? contentRef.current.scrollHeight : 0
-    }
-  }, [content, loading, contentSortAsc])
+    if (!copied) return
+    const timer = window.setTimeout(() => setCopied(false), 1500)
+    return () => window.clearTimeout(timer)
+  }, [copied])
 
-  const copyContent = async () => {
+  const copy = async () => {
     try {
-      await navigator.clipboard.writeText(displayedLines)
+      await navigator.clipboard.writeText(visible.map(item => item.raw).join('\n'))
       setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
-    } catch { /* 剪贴板不可用 */ }
+    } catch { toast.error(t('log.copyFailed')) }
   }
-
   const openDir = async () => {
-    await ipc.invoke('log:open-dir')
+    try {
+      if (!(await ipc.invoke('log:open-dir')).success) toast.error(t('log.openDirFailed'))
+    } catch { toast.error(t('log.openDirFailed')) }
   }
 
+  const total = result?.totalLines ?? 0
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl h-[70vh] flex flex-col p-0 gap-0">
-        <DialogHeader className="flex flex-row items-center justify-between pr-12">
-          <DialogTitle>{t('log.title')}</DialogTitle>
-          <div className="flex items-center gap-1">
-            {/* 环境切换 */}
-            <FilterButtons
-              value={env}
-              onChange={setEnv}
-              items={[
-                { value: 'dev', label: t('log.envDev'), title: t('log.envDev') },
-                { value: 'release', label: t('log.envRelease'), title: t('log.envRelease') },
-              ]}
-            />
-            <Button variant="ghost" size="icon" onClick={loadFiles} title={t('log.refresh')}>
-              <RefreshCw size={13} />
-            </Button>
-            <Button variant="ghost" size="icon" onClick={openDir} title={t('log.openDir')}>
-              <FolderOpen size={13} />
-            </Button>
+    <Dialog open={open} onOpenChange={next => {
+      if (!next) { setQuery(''); setCopied(false); setFileResult(undefined); setListState('loading') }
+      onOpenChange(next)
+    }}>
+      <DialogContent className="nf-log-file-dialog">
+        <DialogHeader className="nf-log-file-header">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="nf-log-file-mark"><ScrollText size={18} aria-hidden="true" /></span>
+            <div><DialogTitle>{t('log.title')}</DialogTitle><DialogDescription>{t('log.fileHint')}</DialogDescription></div>
+          </div>
+          <div className="flex flex-wrap items-center gap-1">
+            <FilterButtons size="sm" value={env} onChange={value => { setEnv(value); setFileName(''); setQuery('') }}
+              items={[{ value: 'dev', label: t('log.envDev') }, { value: 'release', label: t('log.envRelease') }]} />
+            <Button variant="ghost" size="icon" onClick={() => { setListState('loading'); setRefresh(value => value + 1) }}
+              title={t('log.refresh')} aria-label={t('log.refresh')}><RefreshCw size={15} aria-hidden="true" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => void openDir()}
+              title={t('log.openDir')} aria-label={t('log.openDir')}><FolderOpen size={15} aria-hidden="true" /></Button>
           </div>
         </DialogHeader>
 
-        <div className="flex flex-1 min-h-0">
-          {/* 文件列表 */}
-          <div className="w-56 flex-shrink-0 border-r border-[var(--color-border)] flex flex-col">
-            <div className="flex items-center justify-end px-1.5 py-1 border-b border-[var(--color-border)] flex-shrink-0">
-              <Button
-                variant="ghost" size="icon"
-                onClick={() => setListSortAsc(!listSortAsc)}
-                title={listSortAsc ? t('log.sortAsc') : t('log.sortDesc')}
-                className={listSortAsc ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
-              >
-                {listSortAsc ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+        <div className="nf-log-file-layout">
+          <aside className="nf-log-file-list" aria-label={t('log.fileList')}>
+            <div className="nf-log-file-list-head">
+              <strong>{t('log.fileList')}</strong><CountBadge value={files.length} />
+              <Button variant="ghost" size="icon" className="ms-auto size-8" onClick={() => setListAsc(value => !value)}
+                title={t(listAsc ? 'log.filesOldest' : 'log.filesNewest')} aria-label={t(listAsc ? 'log.filesOldest' : 'log.filesNewest')}>
+                <SortDirectionIcon direction={listAsc ? 'asc' : 'desc'} />
               </Button>
             </div>
-            <div className="flex-1 overflow-y-auto py-1">
-            {sortedFiles.length === 0 ? (
-              <EmptyState message={t('log.noFiles')} size="xs" className="text-center" />
-            ) : sortedFiles.map((file) => (
-              <button
-                key={`${file.env}-${file.name}`}
-                type="button"
-                onClick={() => setSelected(file)}
-                className={`w-full text-left px-3 py-2 flex flex-col gap-0.5 transition-colors ${
-                  selected?.name === file.name
-                    ? 'bg-[color-mix(in_srgb,var(--color-accent)_12%,transparent)]'
-                    : 'hover:bg-[var(--color-hover)]'
-                }`}
-              >
-                <span className="flex items-center gap-1.5 text-xs text-[var(--color-text)]">
-                  <FileText size={11} className="flex-shrink-0 opacity-60" />
-                  <span className="truncate">{file.name}</span>
-                </span>
-                <span className="pl-[18px] text-2xs text-[var(--color-text-muted)]">
-                  {formatSize(file.size)} · {formatDate(file.mtime)}
-                </span>
-              </button>
-            ))}
+            <div className="nf-log-file-items">
+              {listState === 'failed' ? <p role="alert" className="p-3 text-xs text-[var(--color-error)]">{t('log.loadError')}</p>
+                : files.length === 0 ? <EmptyState size="xs" message={t(listState === 'ready' ? 'log.noFiles' : 'status.loading')} />
+                  : files.map(file => (
+                    <button key={file.name} type="button" aria-current={selectedName === file.name || undefined} className="nf-log-file-item"
+                      onClick={() => { setFileName(file.name); setQuery('') }} data-tooltip={file.name}>
+                      <FileText size={15} aria-hidden="true" />
+                      <span className="min-w-0">
+                        <span className="block truncate text-xs font-medium">{file.name}</span>
+                        <span className="nf-log-file-meta">
+                          {file.mtime > 0 && <span><CalendarDays size={11} aria-hidden="true" /> {date.format(file.mtime)}</span>}
+                          <span>{sizeLabel(file.size)}</span>
+                        </span>
+                      </span>
+                      <ChevronRight size={13} className="ms-auto shrink-0 opacity-50" aria-hidden="true" />
+                    </button>
+                  ))}
             </div>
-          </div>
+          </aside>
 
-          {/* 内容区 */}
-          <div className="flex-1 min-w-0 flex flex-col">
-            <div className="flex items-center justify-between px-3 py-1 border-b border-[var(--color-border)] flex-shrink-0">
-              <span className="text-2xs text-[var(--color-text-muted)]">
-                {selected
-                  ? (totalLines > MAX_CONTENT_LINES
-                      ? t('log.totalLines').replace('{total}', String(totalLines)).replace('{shown}', String(MAX_CONTENT_LINES))
-                      : `${totalLines} lines`)
-                  : ''}
-              </span>
+          <div className="nf-log-file-body">
+            <div className="nf-log-file-tools">
+              <div className="nf-log-file-search">
+                <Search size={14} aria-hidden="true" />
+                <Input type="search" value={query} onChange={event => setQuery(event.target.value)} disabled={!content}
+                  aria-label={t('log.fileSearch')} placeholder={t('log.fileSearch')} className="h-8" />
+              </div>
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost" size="icon"
-                  onClick={() => setContentSortAsc(!contentSortAsc)}
-                  disabled={!content}
-                  title={contentSortAsc ? t('log.sortAsc') : t('log.sortDesc')}
-                  className={contentSortAsc ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-accent)]'}
-                >
-                  {contentSortAsc ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
+                <Button variant="ghost" size="icon" disabled={!content} onClick={() => setRecordsAsc(value => !value)}
+                  title={t(recordsAsc ? 'log.sortAsc' : 'log.sortDesc')} aria-label={t(recordsAsc ? 'log.sortAsc' : 'log.sortDesc')}>
+                  <SortDirectionIcon direction={recordsAsc ? 'asc' : 'desc'} />
                 </Button>
-                <Button
-                  variant="ghost" size="icon"
-                  onClick={copyContent}
-                  disabled={!content}
-                  title={t('log.copy')}
-                >
-                  {copied ? <Check size={13} className="text-[var(--color-accent)]" /> : <Copy size={13} />}
+                <Button variant="ghost" size="icon" disabled={!visible.length}
+                  onClick={() => { if (scroll.current) scroll.current.scrollTop = recordsAsc ? scroll.current.scrollHeight : 0 }}
+                  title={t('log.jumpLatest')} aria-label={t('log.jumpLatest')}>
+                  {recordsAsc ? <ListEnd size={16} aria-hidden="true" /> : <ListStart size={16} aria-hidden="true" />}
+                </Button>
+                <Button variant="ghost" size="icon" disabled={!visible.length} onClick={() => void copy()}
+                  title={t(copied ? 'log.copied' : 'log.copy')} aria-label={t(copied ? 'log.copied' : 'log.copy')}>
+                  {copied ? <Check size={15} aria-hidden="true" /> : <Copy size={15} aria-hidden="true" />}
                 </Button>
               </div>
             </div>
-
-            <div className="flex-1 overflow-auto">
-              {!selected ? (
-                <div className="h-full flex items-center justify-center text-xs opacity-50">
-                  {t('log.selectHint')}
-                </div>
-              ) : loading ? (
-                <div className="h-full flex items-center justify-center text-xs opacity-50">
-                  {t('status.loading')}
-                </div>
-              ) : loadError ? (
-                <div className="h-full flex items-center justify-center text-xs text-[var(--color-error)]">
-                  {loadError}
-                </div>
-              ) : (
-                <pre
-                  ref={contentRef}
-                  className="p-3 font-mono text-micro leading-5 whitespace-pre-wrap break-all text-[var(--color-text-secondary)]"
-                >
-                  {displayedLines}
-                </pre>
-              )}
+            <div ref={scroll} className="nf-log-file-scroll" tabIndex={0} aria-label={t('log.fileContent')}>
+              {!selected ? <EmptyState size="sm" icon={<FileText size={25} />} message={t('log.selectHint')} />
+                : !result ? <div className="nf-log-file-state" role="status"><Spinner size={16} />{t('status.loading')}</div>
+                  : !result.success ? <div className="nf-log-file-state text-[var(--color-error)]" role="alert">{result.error ?? t('log.loadError')}</div>
+                    : !visible.length ? <EmptyState size="sm" message={t(search ? 'log.fileNoMatches' : 'status.noLogs')} />
+                      : visible.map(item => (
+                        <article className="nf-log-record" key={item.id} data-level={item.level}>
+                          {item.level && (
+                            <header className="nf-log-record-head">
+                              {item.time && <time dateTime={item.time} title={item.time}>
+                                {Number.isFinite(Date.parse(item.time)) ? time.format(Date.parse(item.time)) : item.time}
+                              </time>}
+                              <span className="nf-log-severity">{t(LEVEL_KEYS[item.level])}</span>
+                              <span className="nf-log-source">{item.source}</span>
+                            </header>
+                          )}
+                          <p>{item.message}</p>
+                        </article>
+                      ))}
             </div>
+            <footer className="nf-log-file-footer" role="status">
+              {result?.success && <span>{t(total > MAX_LINES ? 'log.totalLines' : 'log.fileLines')
+                .replace('{total}', String(total)).replace('{shown}', String(MAX_LINES))}</span>}
+              {search && <span>{t('log.fileMatches').replace('{total}', String(visible.length))}</span>}
+            </footer>
           </div>
         </div>
       </DialogContent>

@@ -6,7 +6,8 @@
  */
 import { useState, useRef, useEffect, memo, useMemo, useId } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Trash2, ChevronsDown, ArrowUp, ArrowDown, Copy, Check, FileText, FolderOpen, ListFilter, Info, TriangleAlert, CircleAlert } from 'lucide-react'
+import { Trash2, ListEnd, ListStart, Copy, Check, FileText, FolderOpen, ListFilter, Info, TriangleAlert, CircleAlert } from 'lucide-react'
+import { SortDirectionIcon } from '../ui/ActionIcons'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
@@ -132,17 +133,17 @@ export default memo(function LogsView() {
             aria-label={sortAsc ? t('log.sortAsc') : t('log.sortDesc')}
             className={sortAsc ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-accent)]'}
           >
-            {sortAsc ? <ArrowDown size={13} /> : <ArrowUp size={13} />}
+            <SortDirectionIcon direction={sortAsc ? 'asc' : 'desc'} />
           </Button>
           <Button
-            variant="ghost" size="icon"
+            variant="ghost" size="icon" active={autoScroll}
             onClick={() => setAutoScroll(!autoScroll)}
             title={autoScroll ? t('tip.autoScrollOn') : t('tip.autoScrollOff')}
             aria-label={autoScroll ? t('tip.autoScrollOn') : t('tip.autoScrollOff')}
             aria-pressed={autoScroll}
             className={autoScroll ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
           >
-            <ChevronsDown size={13} />
+            {sortAsc ? <ListEnd size={16} aria-hidden="true" /> : <ListStart size={16} aria-hidden="true" />}
           </Button>
           <Button variant="ghost" size="icon" onClick={clearLogs} title={t('tip.clearLog')} aria-label={t('tip.clearLog')}>
             <Trash2 size={13} />
