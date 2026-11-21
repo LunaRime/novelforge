@@ -52,15 +52,15 @@
   .nf-document-actions .nf-version-actions-narrow { display: block; }
 }
 
-/* 打开的文档沿轨道排列，活动标签的麦金色上沿对应稿纸折角。 */
+/* 活动标签与正文共用纸面，双侧收边，下缘覆盖轨道分隔线。 */
 .nf-editor-tabs {
   display: flex;
   flex: 0 0 auto;
-  align-items: center;
+  align-items: stretch;
   gap: 0.5rem;
   min-height: 2.75rem;
   padding: 0.375rem 0.625rem 0;
-  border-block-end: 1px solid var(--color-border);
+  box-shadow: inset 0 -1px var(--color-border);
   background: var(--color-panel);
 }
 
@@ -90,11 +90,13 @@
 .nf-editor-tab:focus-within { background: var(--color-hover); }
 
 .nf-editor-tab[data-active='true'] {
-  background: var(--color-tab-active);
+  background: var(--color-editor-bg);
   border-color: var(--color-border);
   box-shadow: inset 0 2px var(--color-workbench-fold);
   color: var(--color-text);
 }
+
+.nf-editor-tabs > :last-child { align-self: center; padding-block-end: 0.125rem; }
 
 .nf-editor-tab-select {
   display: flex;

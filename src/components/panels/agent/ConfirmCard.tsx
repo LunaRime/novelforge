@@ -8,6 +8,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import { Button } from '../../ui/Button'
+import { SemanticLabel } from '../../ui/SemanticLabel'
 import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -129,7 +130,7 @@ export default function ConfirmCard({ toolCall }: Props) {
         )}
         {showRiskHint && (
           <div style={{ marginTop: 4, fontSize: 'var(--text-2xs)', color: 'var(--color-warning)' }}>
-            {t('agentConfirm.riskHigh')}
+            <SemanticLabel name="warning">{t('agentConfirm.riskHigh')}</SemanticLabel>
           </div>
         )}
         {Object.keys(args).length > 0 && (

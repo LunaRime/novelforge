@@ -245,7 +245,7 @@ describe('RecentConversationItem hover 行为', () => {
     // hover 亮起的范围里含点不动的按钮）。改为按内容自适应（grid 叠放同一格）。
     const rightBox = row.lastElementChild as HTMLElement
     expect(rightBox.style.width).toBe('')
-    expect(rightBox.className).toContain('grid')
+    expect(rightBox.className).toContain('nf-agent-history-row-tools')
     // 断言 2：时间元素走类而非内联 opacity（内联会压过 group-hover/row:opacity-0，hover 永不淡出）
     const timeSpan = rightBox.querySelector<HTMLSpanElement>('span[class*="group-hover/row:opacity-0"]')!
     expect(timeSpan).toBeTruthy()
@@ -263,7 +263,7 @@ describe('RecentConversationItem hover 行为', () => {
 
     // 断言 4（用户 2026-10-16 的核心诉求）：**整行**才是选中范围 ——
     // 行容器自身带悬停底（此前只有标题那一小块亮，右侧按钮旁是一片「亮了点不动」的空档）
-    expect(row.className).toContain('hover:bg-[var(--color-hover)]')
+    expect(row.className).toContain('nf-agent-history-row')
     expect(row.className).toContain('group/row')
     // 主按钮不再自亮（否则出现「主按钮一块 + 行另一块」双底，且两块之间有空档）
     const mainBtn = row.querySelector<HTMLButtonElement>('button')!
@@ -304,12 +304,13 @@ describe('RecentConversationItem hover 行为', () => {
     // 打开「更多」→ 删除入口出现在菜单里（danger 菜单项）
     act(() => { more.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     expect(more.getAttribute('aria-expanded')).toBe('true')
-    expect(deleteIn(row)).toHaveLength(1)
+    const menu = document.body.querySelector<HTMLElement>('[role=menu]')!
+    expect(deleteIn(menu)).toHaveLength(1)
     // 菜单项是**文字型目标**（§5 文字型下限 20px）：MenuItem = text-xs 行盒 + py-1.5 ≈ 24.5px
-    expect(deleteIn(row)[0].className).toContain('py-1.5')
+    expect(deleteIn(menu)[0].className).toContain('py-1.5')
 
     // 点击删除 → 走既有的 confirm 二次确认（命令式挂到 body），确认后回调带**该行**会话 id
-    act(() => { deleteIn(row)[0].dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    act(() => { deleteIn(menu)[0].dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     // 菜单已显式关闭，故此刻 body 上只剩确认框那一个同名按钮
     const confirmBtns = [...document.body.querySelectorAll('button')]
@@ -329,9 +330,9 @@ describe('RecentConversationItem hover 行为', () => {
     const row = rowOf(container)
     const more = row.querySelector<HTMLButtonElement>(`[title="${t('tip.moreOptions')}"]`)!
     act(() => { more.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect([...row.querySelectorAll('button')].some(b => b.textContent?.trim() === t('agent.deleteConversation'))).toBe(true)
-    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
-    expect([...row.querySelectorAll('button')].some(b => b.textContent?.trim() === t('agent.deleteConversation'))).toBe(false)
+    expect(document.body.querySelector('[role=menu]')?.textContent).toContain(t('agent.deleteConversation'))
+    act(() => { document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })) })
+    expect(document.body.querySelector('[role=menu]')).toBeNull()
     expect(more.getAttribute('aria-expanded')).toBe('false')
     act(() => { root.unmount() })
   })
@@ -510,7 +511,7 @@ describe('AgentHistoryPanel fork 层级', () => {
 
     // 打开「更多」：分叉 / 归档 / 删除 三项都在菜单内（菜单项为文字型目标，MenuItem py-1.5）
     act(() => { row.querySelector<HTMLButtonElement>(`[title="${t('tip.moreOptions')}"]`)!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    const labels = [...row.querySelectorAll('button')].map(b => b.textContent?.trim())
+    const labels = [...document.body.querySelectorAll('[role=menuitem]')].map(b => b.textContent?.trim())
     expect(labels).toContain(t('agent.duplicateConversation'))
     expect(labels).toContain(t('agent.archiveConversation'))
     expect(labels).toContain(t('agent.deleteConversation'))
@@ -524,7 +525,7 @@ describe('AgentHistoryPanel fork 层级', () => {
     const rowC = historyRows(container).find(r => r.textContent?.includes('子会话B'))!
     const moreOf = (r: HTMLElement) => r.querySelector<HTMLButtonElement>(`[title="${t('tip.moreOptions')}"]`)!
     const menuOpenIn = (r: HTMLElement) =>
-      [...r.querySelectorAll('button')].some(b => b.textContent?.trim() === t('agent.deleteConversation'))
+      moreOf(r).getAttribute('aria-expanded') === 'true'
 
     act(() => { moreOf(rowR).dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     expect(menuOpenIn(rowR)).toBe(true)
@@ -535,7 +536,7 @@ describe('AgentHistoryPanel fork 层级', () => {
     expect(menuOpenIn(rowC)).toBe(true)
 
     // Esc 一并收起（useEscapeKey）
-    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    act(() => { document.activeElement?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })) })
     expect(menuOpenIn(rowC)).toBe(false)
     act(() => { root.unmount() })
   })
@@ -622,7 +623,7 @@ describe('ContextBudgetBar 常驻告警标记（C 档第一轮 T6）', () => {
     })
   })
 
-  it('常驻超上限：明细面板给出 ⚠ 标记与告警文案（title 含上限值）', async () => {
+  it('常驻超上限：明细面板给出警告图标与告警文案（title 含上限值）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useAgentStore.setState(state => ({
       conversations: state.conversations.map(c => c.id === conv.id ? {
@@ -640,7 +641,7 @@ describe('ContextBudgetBar 常驻告警标记（C 档第一轮 T6）', () => {
 
     const panel = document.body.textContent ?? ''
     expect(panel).toContain(t('context.seg.memory-resident'))   // 段仍在明细里（要知道它被跳过了）
-    expect(panel).toContain('⚠')
+    expect(container.querySelector('svg.lucide-triangle-alert')).toBeTruthy()
     const warn = [...document.body.querySelectorAll('[title]')]
       .find(el => (el.getAttribute('title') ?? '').includes('4000'))
     expect(warn).toBeTruthy()

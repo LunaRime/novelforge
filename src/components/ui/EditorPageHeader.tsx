@@ -26,7 +26,7 @@ export default function EditorPageHeader({
   return (
     <header className={cn('flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-1 border-b border-[var(--color-border)] bg-[var(--color-editor-bg)] px-3 py-2', className)}>
       <div className="flex min-w-0 items-center gap-2">
-        <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-lg bg-[var(--color-panel)] text-[var(--color-accent)]">
+        <span aria-hidden="true" className="grid size-6 shrink-0 place-items-center text-[var(--color-accent)]">
           {icon}
         </span>
         <h2 className="min-w-0 truncate text-base font-semibold text-[var(--color-text)]" title={title}>

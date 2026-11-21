@@ -109,7 +109,7 @@ export const agentTexts = {
   'agentConfirm.callExternalApi': { 'zh-CN': '将调用外部接口：{method} {path}', 'en-US': 'Will call external API: {method} {path}', 'ru-RU': 'Вызовет внешний API: {method} {path}' },
   'agentConfirm.alwaysAllow': { 'zh-CN': '本项目内始终允许', 'en-US': 'Always allow in this project', 'ru-RU': 'Всегда разрешать в этом проекте' },
   'agentConfirm.rememberHint': { 'zh-CN': '将记住：{pattern}', 'en-US': 'Will remember: {pattern}', 'ru-RU': 'Будет запомнено: {pattern}' },
-  'agentConfirm.riskHigh': { 'zh-CN': '⚠️ 风险较高：该工具的影响范围可能超出当前项目，请谨慎批准', 'en-US': '⚠️ High risk: this tool may act outside the current project — approve with care', 'ru-RU': '⚠️ Высокий риск: инструмент может выходить за пределы проекта — будьте осторожны' },
+  'agentConfirm.riskHigh': { 'zh-CN': '风险较高：该工具的影响范围可能超出当前项目，请谨慎批准', 'en-US': 'High risk: this tool may act outside the current project — approve with care', 'ru-RU': 'Высокий риск: инструмент может выходить за пределы проекта — будьте осторожны' },
   'agentConfirm.keyboardHint': { 'zh-CN': 'Enter 允许一次 · Esc 拒绝', 'en-US': 'Enter to allow once · Esc to reject', 'ru-RU': 'Enter — разрешить один раз · Esc — отклонить' },
   'agentPanel.commands': { 'zh-CN': '命令', 'en-US': 'Commands', 'ru-RU': 'Команды' },
   'agentPanel.mentionContext': { 'zh-CN': '@提及', 'en-US': '@Mention', 'ru-RU': '@Упоминание' },
@@ -200,6 +200,8 @@ export const agentTexts = {
   'agent.disclaimer': { 'zh-CN': 'AI 生成内容仅供参考，重要信息请自行核实。', 'en-US': 'AI-generated content is for reference only. Verify important information.', 'ru-RU': 'Контент ИИ — только для справки. Проверяйте важную информацию.' },
   'agent.aiWorkflow': { 'zh-CN': '工作流输出', 'en-US': 'Workflow Output', 'ru-RU': 'Вывод рабочего процесса' },
   'agent.allConversations': { 'zh-CN': '全部对话', 'en-US': 'All conversations', 'ru-RU': 'Все диалоги' },
+  'agent.historyHelp': { 'zh-CN': '对话列表说明', 'en-US': 'About conversation history', 'ru-RU': 'О списке диалогов' },
+  'agent.historyHelpText': { 'zh-CN': '对话按小说分组。点击组名展开，选择对话即可继续。使用归档按钮查看已归档的对话。', 'en-US': 'Conversations are grouped by novel. Expand a group and choose a conversation to continue. Use the archive button to show archived conversations.', 'ru-RU': 'Диалоги сгруппированы по романам. Раскройте группу и выберите диалог, чтобы продолжить. Кнопка архива показывает архивные диалоги.' },
   'agent.noConversations': { 'zh-CN': '暂无对话记录', 'en-US': 'No conversation history', 'ru-RU': 'Нет истории диалогов' },
   'agent.deleteConversation': { 'zh-CN': '删除对话', 'en-US': 'Delete conversation', 'ru-RU': 'Удалить диалог' },
   // 删除会话此前**无二次确认**（一点即清空整段对话历史），而删除工作区/回退都有 —— 补齐一致性
