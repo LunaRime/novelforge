@@ -11,6 +11,12 @@ on:
       - '**/*.md'
   pull_request:
     branches: [ "master" ]
+  workflow_dispatch:
+    inputs:
+      linux_tag:
+        description: 'Existing stable or beta tag to rebuild for Linux'
+        required: true
+        type: string
 
 # 同一 ref 连推时取消仍在跑的旧运行（2026-10-01 加）
 concurrency:
@@ -22,6 +28,7 @@ jobs:
   # Ubuntu 用单个作业运行全量测试，三平台均保留完整覆盖。
   test:
     name: Test (${{ matrix.os }}${{ matrix.shard && format(', {0}', matrix.shard) || '' }})
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       # 保留其余系统和分片的结果，便于定位失败。
@@ -43,6 +50,7 @@ jobs:
 
   static:
     name: Lint and type checks
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -58,6 +66,7 @@ jobs:
 
   contracts:
     name: Storage contracts
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +77,7 @@ jobs:
 
   build:
     name: Build and smoke check
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -101,16 +111,28 @@ jobs:
 
         echo "✅ CI smoke check 通过"
 
-  # ===== Release 构建（仅 tag push 触发，Ubuntu 环境） =====
+  # ===== Release 构建（tag push 或手动重建已有 tag，Ubuntu 环境） =====
   # 本 job 只产出 GitHub Actions artifact（NovelForge-linux-<tag>），**不写入 GitHub Release 资产**——
   # 正式发布走本地 Windows 构建 + gh release create（见 novelforge-release）。
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: ${{ !cancelled() && ((github.event_name == 'workflow_dispatch' && inputs.linux_tag) || (startsWith(github.ref, 'refs/tags/v') && success())) }}
     needs: [test, static, contracts, build]
     runs-on: ubuntu-latest
 
     steps:
+    - name: Validate rebuild tag
+      if: github.event_name == 'workflow_dispatch'
+      env:
+        RELEASE_TAG: ${{ inputs.linux_tag }}
+      run: |
+        if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]]; then
+          echo 'Expected a stable or beta version tag' >&2
+          exit 1
+        fi
+
     - uses: actions/checkout@v4
+      with:
+        ref: ${{ inputs.linux_tag && format('refs/tags/{0}', inputs.linux_tag) || github.sha }}
 
     - name: Enable pnpm (via corepack)
       run: corepack enable pnpm
@@ -130,10 +152,22 @@ jobs:
         # 走 npmmirror 下载 electron-builder 二进制（appimage/mksquashfs 等），
         # 避免 CI 从 GitHub 直连下载超时/限流导致 AppImage 打包失败
         ELECTRON_BUILDER_BINARIES_MIRROR: 'https://npmmirror.com/mirrors/electron-builder-binaries/'
-      run: pnpm run build
+      run: |
+        if [[ "$GITHUB_EVENT_NAME" == 'workflow_dispatch' ]]; then
+          # 旧标签的构建脚本可能隐式发布，重建时使用显式的本地打包命令。
+          node scripts/verify-build-contract.cjs
+          pnpm run typecheck
+          pnpm run build:vite
+          node scripts/check-public-console.mjs
+          pnpm exec electron-builder --publish never
+          node scripts/verify-packed-app.cjs
+        else
+          pnpm run build
+        fi
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
       with:
-        name: NovelForge-linux-${{ github.ref_name }}
-        path: release/*/
+        name: NovelForge-linux-${{ inputs.linux_tag || github.ref_name }}
+        path: release/*/*.AppImage
+        if-no-files-found: error
