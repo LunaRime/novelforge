@@ -19,6 +19,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
+import { SemanticLabel } from '../ui/SemanticLabel'
 import { Textarea } from '../ui/Textarea'
 import { confirm } from '../ui/Confirm'
 import { renderLog } from '../../services/render-logger'
@@ -419,8 +420,7 @@ function TemplateItem({
                   : 'color-mix(in srgb, var(--color-error) 20%, transparent)',
               }}
             >
-              {saveResult.type === 'success' ? '✅ ' : '❌ '}
-              {saveResult.msg}
+              <SemanticLabel name={saveResult.type}>{saveResult.msg}</SemanticLabel>
             </div>
           )}
         </div>

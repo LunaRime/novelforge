@@ -95,6 +95,7 @@ export default function PublicationGroup({ projectPath }: Props) {
             className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
             style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
             title={t('pub.import')}
+            aria-label={t('pub.import')}
           >
             <Plus size={12} />
           </button>
@@ -144,6 +145,7 @@ export default function PublicationGroup({ projectPath }: Props) {
                 type="button"
                 className="flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity cursor-pointer flex-shrink-0"
                 title={t('action.delete')}
+                aria-label={t('action.delete')}
                 onClick={() => void handleDelete(e)}
                 style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
               >

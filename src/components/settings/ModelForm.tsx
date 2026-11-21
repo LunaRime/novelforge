@@ -1,3 +1,4 @@
+import { SemanticLabel } from '../ui/SemanticLabel'
 /* eslint-disable react-refresh/only-export-components -- 有意混合导出：tokenSpec 与 ModelForm
    强关联（切换预设即重算规格），拆文件只会把一处内聚逻辑劈两半；Button.tsx 同款先例。 */
 /**
@@ -514,7 +515,7 @@ export function ModelForm({
       </div>
       {testResult && (
         <div className={`text-xs p-2 rounded ${testResult.success ? 'bg-[rgba(var(--color-success-rgb),0.1)] text-[var(--color-success)] border border-[rgba(var(--color-success-rgb),0.2)]' : 'bg-[rgba(var(--color-error-rgb),0.1)] text-[var(--color-error)] border border-[rgba(var(--color-error-rgb),0.2)]'} break-all`}>
-          {testResult.success ? `✅ ${t('model.testSuccess')}` : `❌ ${t('model.testFailed').replace('{error}', testResult.error ?? '')}`}
+          <SemanticLabel name={testResult.success ? 'success' : 'error'}>{testResult.success ? t('model.testSuccess') : t('model.testFailed').replace('{error}', testResult.error ?? '')}</SemanticLabel>
         </div>
       )}
     </div>

@@ -716,10 +716,11 @@
     position: relative;
   }
 
-  /* 激活节点：背景 + 左侧 2px 品牌色竖线 */
-  .tree-item.active {
+  /* 激活节点与行片共用完整的圆角底色 */
+  .tree-item.active,
+  .menu-chip[data-active='true'] {
     background: var(--color-active);
-    box-shadow: inset 2px 0 0 var(--color-accent);
+
   }
 
   /* ===== 旧按钮类已废弃 — 请使用 <Button> 组件 (src/components/ui/Button.tsx) ===== */

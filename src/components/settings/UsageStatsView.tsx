@@ -14,7 +14,7 @@ import type {
   UsageDashboardData,
 } from '../../shared/ipc-channels'
 import { useTranslation } from '../../hooks/useTranslation'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { FilterButtons, ViewTabs } from '../ui/ChoiceControls'
 import { useLayoutStore } from '../../stores/layout-store'
 
 type UsageView = 'current' | 'global'
@@ -212,7 +212,7 @@ export default function UsageStatsView() {
           >
             <Palette size={12} /> {t('usage.styleSettings')}
           </Button>
-          <SegmentedControl<UsageView>
+          <ViewTabs<UsageView>
             size="sm"
             value={view}
             onChange={setView}
@@ -230,7 +230,7 @@ export default function UsageStatsView() {
       {view === 'current' && (
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <span className="text-micro tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{rangeText}</span>
-          <SegmentedControl<`${RangeDays}`>
+          <FilterButtons<`${RangeDays}`>
             size="sm"
             value={String(rangeDays) as `${RangeDays}`}
             onChange={(value) => setRangeDays(Number(value) as RangeDays)}

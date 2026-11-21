@@ -42,11 +42,6 @@
   color: var(--color-accent);
 }
 
-/* 当前详情在列表内保留折页标记，窄栏返回时能定位到同一条记录。 */
-.nf-feature-list button[aria-current='page'] {
-  box-shadow: inset 2px 0 var(--color-accent);
-}
-
 @container feature-split (max-width: 44rem) {
   .nf-feature-split-layout { grid-template-columns: minmax(0, 1fr); }
   [data-feature-view='list'] > .nf-feature-detail,

@@ -141,17 +141,17 @@ describe('ContextBudgetBar 明细弹层', () => {
   })
 
   // ===== 告警标记（原来的 warn 语气 chip 语义，在新形态下靠行内标记 + title 承担）=====
-  it('截断段：行内 ✂ 标记 + title 给来源（信号不再靠正文里的裸符号配色）', () => {
+  it('截断段：行内剪刀图标 + title 给来源（信号不再靠正文里的裸符号配色）', () => {
     const el = render(<ContextBudgetBar usage={usage()} />)
     openPopover()
     const tools = rowOf(el, 'tools')!
-    expect(tools.textContent).toContain('✂')
+    expect(tools.querySelector('svg.lucide-scissors')).toBeTruthy()
     expect(tools.getAttribute('title')).toBe('23 个工具说明')
     const identity = rowOf(el, 'identity')!
-    expect(identity.textContent).not.toContain('✂')
+    expect(identity.querySelector('svg.lucide-scissors')).toBeNull()
   })
 
-  it('常驻告警：⚠ 优先于 ✂，原因与来源一起进 title（悬停整行即得）', () => {
+  it('常驻告警：警告图标优先于剪刀图标，原因与来源一起进 title（悬停整行即得）', () => {
     const el = render(<ContextBudgetBar usage={usage({
       segments: [{
         key: 'memory-resident', tokens: 0, chars: 0, truncated: true,
@@ -160,8 +160,8 @@ describe('ContextBudgetBar 明细弹层', () => {
     })} />)
     openPopover()
     const row = rowOf(el, 'memory-resident')!
-    expect(row.textContent).toContain('⚠')
-    expect(row.textContent).not.toContain('✂')
+    expect(row.querySelector('svg.lucide-triangle-alert')).toBeTruthy()
+    expect(row.querySelector('svg.lucide-scissors')).toBeNull()
     expect(row.getAttribute('title')).toContain('book-state.md')
     expect(row.getAttribute('title')).toContain('4000')
   })

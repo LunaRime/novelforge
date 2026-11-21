@@ -6,6 +6,7 @@
 import { useMemo } from 'react'
 import { Hash, MessageCircle, Users } from 'lucide-react'
 import { Badge } from '../ui/Badge'
+import { SemanticLabel } from '../ui/SemanticLabel'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { CharacterCard } from '../../stores/character-store'
 
@@ -122,8 +123,8 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
       {character.currentState && (
         <Section icon={<Hash size={12} />} title={t('character.backlinks.stateSummary')}>
           <div className="text-xs space-y-0.5" style={{ color: 'var(--color-text-secondary)' }}>
-            {character.currentState.location && <div>📍 {character.currentState.location}</div>}
-            {character.currentState.powerLevel && <div>⚡ {character.currentState.powerLevel}</div>}
+            {character.currentState.location && <div><SemanticLabel name="location">{character.currentState.location}</SemanticLabel></div>}
+            {character.currentState.powerLevel && <div><SemanticLabel name="power">{character.currentState.powerLevel}</SemanticLabel></div>}
             {character.currentState.recentEvents && (
               <div className="opacity-70">{t('character.backlinks.recent')}{character.currentState.recentEvents}</div>
             )}

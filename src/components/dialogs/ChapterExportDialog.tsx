@@ -16,7 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { OptionCards } from '../ui/ChoiceControls'
 
 export interface ChapterExportDialogProps {
   chapterNumbers: number[]
@@ -255,9 +255,8 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
 
         {/* ==== 文件格式（子级） ==== */}
         <div className="px-5 pb-3">
-          {/* 原先这里用「浮起白药丸」（激活块靠硬编码 boxShadow 浮起）——已并入统一分段条，
-              激活态改由 accent 实底表达，不再需要非令牌阴影 */}
-          <SegmentedControl
+          {/* 两种导出格式各自展示扩展名和用途。 */}
+          <OptionCards
             fill
             value={fileFormat}
             onChange={setFileFormat}

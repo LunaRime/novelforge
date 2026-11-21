@@ -1,0 +1,86 @@
+/* 分隔式页签、独立选项卡和轻量筛选各自表达当前选项。 */
+.nf-choices {
+  display: flex;
+  align-items: stretch;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.nf-choices > button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.625rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms, color 120ms, border-color 120ms;
+}
+
+.nf-choices[data-size='sm'] > button {
+  min-height: 1.75rem;
+  padding-inline: 0.5rem;
+}
+
+.nf-choices > button:focus-visible { outline-offset: -2px; }
+.nf-choices > button:disabled { opacity: 0.5; cursor: not-allowed; }
+.nf-choices > button:enabled:hover { background: var(--color-hover); color: var(--color-text); }
+.nf-choices > button[aria-pressed='true'] { color: var(--color-text); font-weight: 600; }
+
+.nf-choices[data-appearance='tabs'] { gap: 0.5rem; }
+.nf-choices[data-appearance='tabs'] > button {
+  border-end-start-radius: 0;
+  border-end-end-radius: 0;
+  border-block-end: 2px solid transparent;
+}
+.nf-choices[data-appearance='tabs'] > button[aria-pressed='true'] {
+  border-block-end-color: var(--color-workbench-fold);
+}
+
+.nf-choices[data-appearance='cards'] > button {
+  background: var(--color-editor-bg);
+  border-color: var(--color-border);
+}
+.nf-choices[data-appearance='cards'] > button[aria-pressed='true'] {
+  border-color: var(--color-accent);
+  background: var(--color-active);
+}
+.nf-choice-check {
+  display: grid;
+  place-items: center;
+  width: 0.875rem;
+  height: 0.875rem;
+  flex: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+.nf-choices > button[aria-pressed='true'] .nf-choice-check {
+  color: var(--color-accent);
+  border-color: currentColor;
+}
+
+.nf-choices[data-appearance='filters'] > button[aria-pressed='true'] {
+  background: var(--color-active);
+}
+.nf-choices[data-appearance='filters'] > button::before {
+  content: '';
+  width: 0.375rem;
+  height: 0.375rem;
+  flex: none;
+  border: 1px solid var(--color-text-muted);
+  border-radius: 50%;
+}
+.nf-choices[data-appearance='filters'] > button[aria-pressed='true']::before {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+@media (pointer: coarse) {
+  .nf-choices[data-size] > button { min-height: 44px; }
+}

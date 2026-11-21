@@ -28,7 +28,7 @@ import { confirm } from '../../ui/Confirm'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { useMemoryRebuild } from '../../../hooks/useMemoryRebuild'
 import { globalEventBus } from '../../../shared/event-bus'
-import { SegmentedControl } from '../../ui/SegmentedControl'
+import { OptionCards } from '../../ui/ChoiceControls'
 import type { MemoryFileMeta } from '../../../services/memory/memory-codec'
 import type { MemoryLoadMode } from '../../../shared/memory-types'
 
@@ -257,11 +257,11 @@ function MemoryRow({ meta, onRebuild, onSaved, showLoadMode, onLoadModeChange }:
           故不影响侧栏「每行 3 按钮」的既有契约。 */}
       {showLoadMode && (
         <div className="px-1.5 pb-1.5" style={{ borderTop: '1px solid var(--color-border)' }}>
-          <SegmentedControl
+          <OptionCards
             size="sm"
             fill
             value={meta.loadMode}
-            // 点当前档位是 no-op（SegmentedControl 不判 active）——不写盘、不 toast（评审 Minor 5）
+            // 点当前档位是 no-op（OptionCards 不判 active）——不写盘、不 toast（评审 Minor 5）
             onChange={(mode) => { if (mode !== meta.loadMode) onLoadModeChange?.(meta.file, mode) }}
             items={[
               { value: 'resident', label: t('memory.loadModeResident'), title: t('memory.loadModeResidentHint') },

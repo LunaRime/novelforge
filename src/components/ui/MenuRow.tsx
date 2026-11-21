@@ -25,7 +25,7 @@ interface MenuRowProps {
   actions?: ReactNode
   /** 主按钮悬停提示 */
   titleHint?: string
-  /** 选中态（底色 + 左 2px accent 竖线） */
+  /** 选中态（整行填色） */
   active?: boolean
   /** 当前导航项语义，与通用高亮样式独立 */
   current?: AriaAttributes['aria-current']
@@ -58,7 +58,7 @@ export default function MenuRow({
   return (
     <div
       className="menu-chip group flex items-center gap-1.5 select-none"
-      style={active ? { background: 'var(--color-active)', boxShadow: 'inset 2px 0 0 var(--color-accent)' } : undefined}
+      data-active={active || undefined}
       onContextMenu={onContextMenu}
     >
       {leadingButton}

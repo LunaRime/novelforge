@@ -1,3 +1,5 @@
+import { SemanticLabel } from '../ui/SemanticLabel'
+import { characterRoles, characterTier } from './character-labels'
 import { FeatureSplit } from '../ui/FeatureSplit'
 import MenuRow from '../ui/MenuRow'
 import { useState, useRef, useMemo, useEffect } from 'react'
@@ -23,7 +25,7 @@ import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
 import { Disclosure } from '../ui/Disclosure'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { ViewTabs } from '../ui/ChoiceControls'
 import { PopoverSurface } from '../ui/PopoverSurface'
 import { MenuItem } from '../ui/MenuItem'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
@@ -281,7 +283,7 @@ export default function CharacterEditor() {
       {/* ═══ 工具栏：动作只剩「保存」（主操作）+「更多」（低频操作收进去）═══
           重构前这一条 36px 里塞了 **9 个控件**（4 个视图/动作按钮 + 生成档案 + 试演 +
           2 个模板图标 + 删除 + 保存）—— 光按钮就要 ~340px，而编辑区下限只有 320px
-          （`EDITOR_MIN_PX`），窄编辑区必然挤出界。视图切换已独立成下面那条分段条。 */}
+          （`EDITOR_MIN_PX`），窄编辑区必然挤出界。视图切换已独立成下方的页签。 */}
       <div
         className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
         style={{
@@ -291,7 +293,7 @@ export default function CharacterEditor() {
       >
         <div className="flex items-center gap-1.5 min-w-0">
           {/* 标题只说「在编谁」。视图名不再拼进标题（拼法带来 `名字 — 编辑档案` 这类
-              需要一个字符串拼出模式名的写法，而模式现在是下面那条分段条的当前段） */}
+              需要一个字符串拼出模式名的写法，而模式现在是下方当前页签） */}
           <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
             {selectedCard
               ? (selectedCard.name || t('character.newCharacter'))
@@ -406,7 +408,7 @@ export default function CharacterEditor() {
           className="flex items-center px-3 py-1 flex-shrink-0"
           style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-editor-bg)' }}
         >
-          <SegmentedControl<ViewMode>
+          <ViewTabs<ViewMode>
             size="sm"
             value={viewMode}
             onChange={setViewMode}
@@ -495,12 +497,7 @@ export default function CharacterEditor() {
           <div className="max-w-2xl mx-auto px-6 py-4">
             <div className="space-y-3">
               <SectionHeader title={t('character.basicSettings')} />
-              {/* 姓名 + 戏份等级 + 定位。
-                  ⚠️ 列数不能用 `grid-cols-3`：编辑区下限 320px（`EDITOR_MIN_PX`），
-                  三列各 ~100px 时「★★★ 核心」「🌟 主角」会被折成两行（截图实测）。
-                  用 auto-fit 按**容器宽度**（而非视口宽度）自动降到 2 列/1 列 ——
-                  Tailwind 的 `sm:` 断点看视口，1440px 窗口里塞个 320px 编辑区时不会降级。
-                  最小宽统一为 200px（原 160px，与下方字段组 200px 基准不一致 → 10-18 评审统一）。 */}
+              {/* 以编辑区实际宽度决定列数，侧栏展开时字段自动换行。 */}
               <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
                 <div><Label>{t('character.name')}</Label><Input ref={nameInputRef} value={selectedCard.name} onChange={(e) => updateField(selectedCard.name, 'name', e.target.value)} /></div>
                 <div>
@@ -511,8 +508,8 @@ export default function CharacterEditor() {
                   >
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {Object.entries(getTierMap(t)).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      {[1, 2, 3].map(k => (
+                        <SelectItem key={k} value={String(k)}><SemanticLabel name={characterTier(k).icon}>{t(characterTier(k).label)}</SemanticLabel></SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -522,8 +519,8 @@ export default function CharacterEditor() {
                   <Select value={selectedCard.role} onValueChange={(v) => updateField(selectedCard.name, 'role', v as typeof selectedCard.role)}>
                     <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {Object.entries(getRoleMap(t)).map(([k, v]) => (
-                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      {(Object.keys(characterRoles) as Array<keyof typeof characterRoles>).map(k => (
+                        <SelectItem key={k} value={k}><SemanticLabel name={k}>{t(characterRoles[k])}</SemanticLabel></SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -821,22 +818,6 @@ function getRelTypeMap(t: ReturnType<typeof useTranslation>['t']): Record<string
   }
 }
 
-function getRoleMap(t: ReturnType<typeof useTranslation>['t']): Record<string, string> {
-  return {
-    protagonist: t('character.roleLabel.protagonist'),
-    antagonist: t('character.roleLabel.antagonist'),
-    supporting: t('character.roleLabel.supporting'),
-    minor: t('character.roleLabel.minor'),
-  }
-}
-
-function getTierMap(t: ReturnType<typeof useTranslation>['t']): Record<number, string> {
-  return {
-    1: t('character.tierLabel.core'),
-    2: t('character.tierLabel.important'),
-    3: t('character.tierLabel.minor'),
-  }
-}
 
 function StructuredRelations({
   relations, allCharacters, currentName, onChange, t,

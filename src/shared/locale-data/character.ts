@@ -168,15 +168,15 @@ export const characterTexts = {
   'character.relType.rival': { 'zh-CN': '劲敌', 'en-US': 'Rival', 'ru-RU': 'Соперник' },
   'character.relType.neutral': { 'zh-CN': '中立', 'en-US': 'Neutral', 'ru-RU': 'Нейтрально' },
   'character.relType.other': { 'zh-CN': '其他', 'en-US': 'Other', 'ru-RU': 'Другое' },
-  // --- 角色定位（带 emoji） ---
-  'character.roleLabel.protagonist': { 'zh-CN': '🌟 主角', 'en-US': '🌟 Protagonist', 'ru-RU': '🌟 Протагонист' },
-  'character.roleLabel.antagonist': { 'zh-CN': '🔥 反派', 'en-US': '🔥 Antagonist', 'ru-RU': '🔥 Антагонист' },
-  'character.roleLabel.supporting': { 'zh-CN': '👥 配角', 'en-US': '👥 Supporting', 'ru-RU': '👥 Второстепенный' },
-  'character.roleLabel.minor': { 'zh-CN': '📌 龙套', 'en-US': '📌 Minor', 'ru-RU': '📌 Эпизодический' },
-  // --- 戏份等级（带星标） ---
-  'character.tierLabel.core': { 'zh-CN': '★★★ 核心', 'en-US': '★★★ Core', 'ru-RU': '★★★ Ключевой' },
-  'character.tierLabel.important': { 'zh-CN': '★★☆ 重要', 'en-US': '★★☆ Important', 'ru-RU': '★★☆ Важный' },
-  'character.tierLabel.minor': { 'zh-CN': '★☆☆ 龙套', 'en-US': '★☆☆ Minor', 'ru-RU': '★☆☆ Эпизодический' },
+  // --- 角色定位 ---
+  'character.roleLabel.protagonist': { 'zh-CN': '主角', 'en-US': 'Protagonist', 'ru-RU': 'Протагонист' },
+  'character.roleLabel.antagonist': { 'zh-CN': '反派', 'en-US': 'Antagonist', 'ru-RU': 'Антагонист' },
+  'character.roleLabel.supporting': { 'zh-CN': '配角', 'en-US': 'Supporting', 'ru-RU': 'Второстепенный' },
+  'character.roleLabel.minor': { 'zh-CN': '龙套', 'en-US': 'Minor', 'ru-RU': 'Эпизодический' },
+  // --- 戏份等级 ---
+  'character.tierLabel.core': { 'zh-CN': '核心', 'en-US': 'Core', 'ru-RU': 'Ключевой' },
+  'character.tierLabel.important': { 'zh-CN': '重要', 'en-US': 'Important', 'ru-RU': 'Важный' },
+  'character.tierLabel.minor': { 'zh-CN': '龙套', 'en-US': 'Minor', 'ru-RU': 'Эпизодический' },
   // --- CharacterBacklinks ---
   'character.backlinks.chapters': { 'zh-CN': '出场章节', 'en-US': 'Appearance Chapters', 'ru-RU': 'Главы появления' },
   'character.backlinks.noChapters': { 'zh-CN': '暂无出场记录', 'en-US': 'No appearance records', 'ru-RU': 'Нет записей о появлении' },

@@ -49,8 +49,8 @@ export interface ProviderEditorCardProps {
   /** 添加卡的「自定义 API」模式：自定义设置**默认展开** —— 地址/协议是路由字段，不是次要项 */
   advancedOpen?: boolean
   /**
-   * 写入 / 探测进行中上报（添加卡据此锁住两模式的分段切换）。
-   * `saving || 候选面板打开`：后者是模态，理论上点不到背后的分段控件，锁是第二道防线。
+   * 上报写入和探测状态，供添加卡在操作进行中锁定模式选项。
+   * `saving || 候选面板打开`：后者是模态，理论上点不到背后的模式选项，锁是第二道防线。
    */
   onBusyChange?: (busy: boolean) => void
 }

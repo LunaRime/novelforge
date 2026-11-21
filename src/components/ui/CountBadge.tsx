@@ -18,7 +18,7 @@ interface CountBadgeProps {
   /** 单位：章 / 卷 / 事件… */
   unit?: string
   tone?: CountTone
-  /** 显示 2px 迷你进度条（需要 total） */
+  /** 有有效目标时，在计数下方显示迷你进度条。 */
   progress?: boolean
   className?: string
   title?: string
@@ -51,20 +51,19 @@ export default function CountBadge({
   return (
     <span
       className={cn(
-        'inline-flex flex-shrink-0 flex-col items-end gap-0.5 px-1.5 py-px text-micro font-medium leading-none tabular-nums',
-        showProgress ? 'min-w-11 rounded-sm border border-[var(--color-border)] px-1.5 py-[3px]' : 'rounded-full',
+        'inline-flex flex-shrink-0 flex-col items-end gap-0.5 rounded-sm border border-[var(--color-border)] bg-[var(--color-editor-bg)] px-1.5 py-[3px] text-micro font-medium leading-none tabular-nums',
+        showProgress && 'min-w-11',
         className,
       )}
       style={{
-        color: showProgress ? 'var(--color-text)' : color,
-        backgroundColor: showProgress ? 'var(--color-editor-bg)' : `color-mix(in srgb, ${color} 10%, transparent)`,
+        color: showProgress || tone === 'muted' ? 'var(--color-text)' : color,
       }}
       title={title}
     >
       <span className="inline-flex items-baseline gap-0.5 whitespace-nowrap">
-        <span className={showProgress ? 'font-semibold' : undefined}>{value}</span>
-        {total !== undefined && <span className={showProgress ? 'text-[var(--color-text-secondary)]' : 'opacity-55'}>/{total}</span>}
-        {unit && <span className={showProgress ? 'font-normal text-[var(--color-text-secondary)]' : 'font-normal opacity-70'}>{unit}</span>}
+        <span className="font-semibold">{value}</span>
+        {total !== undefined && <span className="text-[var(--color-text-secondary)]">/{total}</span>}
+        {unit && <span className="font-normal text-[var(--color-text-secondary)]">{unit}</span>}
       </span>
       {showProgress && (
         <span

@@ -5,6 +5,7 @@ import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { PopoverSurface } from '../../ui/PopoverSurface'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
+import { SemanticIcon } from '../../ui/SemanticLabel'
 
 /** 数字缩写：131072 → 131k、2584 → 2.6k（窄面板下省宽度） */
 function fmtK(n: number): string {
@@ -32,7 +33,7 @@ const MAX_ROWS = 6
  *   - DSH 三段（system / tools / messages）→ **NF 四段**（基础 / 记忆 / 历史 / 当前），色块沿用本仓令牌
  *     `--color-accent / --color-info / --color-warning / --color-success`（与圆环同源）；
  *   - **保留** NF 的 token 引擎降级标记、面板值 vs 实发值分列、前缀记账、
- *     逐段告警（⚠ 优先于 ✂）与字符数（挂 `title`，DSH 无对应概念但本仓依赖它定位来源）；
+ *     逐段告警（警告优先于截断）与字符数（挂 `title`，用于定位来源体量）；
  *   - 明细行数上限 6（其余折「其它 N 段」），比 DSH 更早收口 —— 本仓窄面板放不下更多。
  */
 export default function ContextBudgetBar({ usage, tokenEngineDegraded = false }: {
@@ -84,7 +85,7 @@ export default function ContextBudgetBar({ usage, tokenEngineDegraded = false }:
         tokens: seg.tokens,
         chars: seg.chars,
         tone: seg.warning ? 'var(--color-warning)' : seg.truncated ? 'var(--color-warning)' : undefined,
-        mark: seg.warning ? '⚠' : seg.truncated ? '✂' : '',
+        mark: seg.warning ? 'warning' as const : seg.truncated ? 'truncated' as const : undefined,
         title: [seg.source, seg.warning].filter(Boolean).join(' — ') || undefined,
       }))
     : segments.map(seg => ({
@@ -93,7 +94,7 @@ export default function ContextBudgetBar({ usage, tokenEngineDegraded = false }:
         tokens: seg.value,
         chars: undefined as number | undefined,
         tone: seg.color,
-        mark: '',
+        mark: undefined,
         title: t('ccr.barHint'),
       }))
   const shownRows = detailRows.slice(0, MAX_ROWS)
@@ -183,7 +184,7 @@ export default function ContextBudgetBar({ usage, tokenEngineDegraded = false }:
                   />
                   <span className="truncate">{row.label}</span>
                   {row.mark && (
-                    <span className="flex-shrink-0" aria-hidden style={{ color: 'var(--color-warning)' }}>{row.mark}</span>
+                    <span className="text-[var(--color-warning)]"><SemanticIcon name={row.mark} size={11} /></span>
                   )}
                 </dt>
                 {/* 值：token 数（主色）；**字符数进 title** —— DSH 无该概念，但本仓靠它定位来源体量 */}

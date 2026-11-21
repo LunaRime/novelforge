@@ -8,7 +8,6 @@ import {
   useCharacterStore, groupByTier,
 } from '../../../stores/character-store'
 import type { CharacterCard } from '../../../stores/character-store'
-import type { TextKey } from '../../../shared/locale'
 import { Button } from '../../ui/Button'
 import { Input } from '../../ui/Input'
 import { EmptyState } from '../../ui/EmptyState'
@@ -23,18 +22,10 @@ import { parseAliases } from '../../../services/character-normalize'
 import { renderLog } from '../../../services/render-logger'
 import { captureCharacterSource, isCharacterSourceCurrent, readCharacterEdits } from '../../../services/characters/character-edits-adapter'
 
-// 角色定位 / 戏份等级 i18n 映射（不使用 store 硬编码常量，语言切换即时更新）
-const ROLE_LABEL_KEYS: Record<CharacterCard['role'], TextKey> = {
-  protagonist: 'character.roleLabel.protagonist',
-  antagonist: 'character.roleLabel.antagonist',
-  supporting: 'character.roleLabel.supporting',
-  minor: 'character.roleLabel.minor',
-}
-const TIER_LABEL_KEYS: Record<number, TextKey> = {
-  1: 'character.tierLabel.core',
-  2: 'character.tierLabel.important',
-  3: 'character.tierLabel.minor',
-}
+import { FilterButtons } from '../../ui/ChoiceControls'
+import CountBadge from '../../ui/CountBadge'
+import { SemanticLabel } from '../../ui/SemanticLabel'
+import { characterRole, characterRoles, characterTier } from '../../editor/character-labels'
 
 export default function CharactersView({ headerAction }: { headerAction?: React.ReactNode }) {
   const { t } = useTranslation()
@@ -172,27 +163,20 @@ export default function CharactersView({ headerAction }: { headerAction?: React.
         </div>
       </div>
 
-      {/* 分级筛选标签 — ⚠️ 容器 flex-wrap + 胶囊 whitespace-nowrap/flex-shrink-0：
-          4 个胶囊（含「★★★ 核心 3」这类长文案）在侧栏宽度里放不下一行，
-          缺这三项会被 flex 压缩成「胶囊内不均折行」（2026-09-28 真机走查缺陷） */}
-      <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
-        {[null, 1, 2, 3].map(tier => (
-          <button
-            key={String(tier)}
-            className={cn(
-              'text-micro px-2 py-0.5 rounded-full transition-colors cursor-pointer border whitespace-nowrap flex-shrink-0',
-              tierFilter === tier
-                ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-accent)]'
-                : 'border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-hover)]'
-            )}
-            onClick={() => setTierFilter(tier)}
-            type="button"
-          >
-            {tier === null ? t('charList.filterAll') : t(TIER_LABEL_KEYS[tier] ?? 'character.tierLabel.core')}
-            <span className="ml-0.5 opacity-60">{tier === null ? characters.length : (grouped[tier] || []).length}</span>
-          </button>
-        ))}
-      </div>
+      {/* 筛选选项和分组标题共用角色等级语义。 */}
+      <FilterButtons
+        className="shrink-0 border-b border-[var(--color-border)] px-2 py-1.5"
+        size="sm"
+        value={tierFilter ?? 0}
+        onChange={tier => setTierFilter(tier || null)}
+        items={[0, 1, 2, 3].map(tier => ({
+          value: tier,
+          label: <>
+            {tier === 0 ? t('charList.filterAll') : t(characterTier(tier).label)}
+            <CountBadge value={tier === 0 ? characters.length : (grouped[tier] || []).length} />
+          </>,
+        }))}
+      />
 
       {/* P1-1：名字/别名搜索框 */}
       <div className="px-2 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
@@ -232,8 +216,8 @@ export default function CharactersView({ headerAction }: { headerAction?: React.
                     ? <ChevronRight size={10} />
                     : <ChevronDown size={10} />
                   }
-                  {t(TIER_LABEL_KEYS[tier] ?? 'character.tierLabel.core')}
-                  <span className="opacity-50 ml-auto">{chars.length}</span>
+                  <SemanticLabel name={characterTier(tier).icon}>{t(characterTier(tier).label)}</SemanticLabel>
+                  <CountBadge value={chars.length} className="ml-auto" />
                 </button>
                 {!collapsed && chars.map(c => (
                   <CharItem
@@ -281,6 +265,7 @@ function CharItem({ char: c, selected, onClick }: {
         .replace('{n}', String(chaps.length))
 
   const tier = c.tier ?? (c.role === 'protagonist' || c.role === 'antagonist' ? 1 : 2)
+  const role = characterRole(c.role)
 
   /* 2026-09-28 批 0：行容器改「行片」（`.menu-chip`）——圆角/左右外边距/悬停底色/2px 片间距
      全部由片承担，原 `rounded-md`/`hover:bg-*`/`mb-0.5`/`transition-colors` 随之删除。
@@ -333,10 +318,10 @@ function CharItem({ char: c, selected, onClick }: {
             </span>
           ) : null}
         </div>
-        <div className="text-micro mt-0.5 opacity-60 flex items-center gap-1.5">
-          <span>{t(ROLE_LABEL_KEYS[c.role] ?? 'character.roleLabel.supporting')}</span>
+        <div className="text-micro mt-0.5 flex items-center gap-2 text-[var(--color-text-secondary)]">
+          <SemanticLabel name={role}>{t(characterRoles[role])}</SemanticLabel>
           {tier === 1 && chaps.length > 0 && (
-            <span className="opacity-50">· {chapsDisplay}</span>
+            <span className="text-[var(--color-text-muted)]">{chapsDisplay}</span>
           )}
         </div>
         {tags.length > 0 && (

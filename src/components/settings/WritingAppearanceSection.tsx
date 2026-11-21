@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { DEFAULT_WRITING_APPEARANCE, type WritingAppearance } from '../../stores/editor-prefs-store'
 import { Button } from '../ui/Button'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { OptionCards } from '../ui/ChoiceControls'
 import './writing-appearance.css'
 
 interface Props {
@@ -31,19 +31,19 @@ export default function WritingAppearanceSection({ appearance, dirty, onChange, 
         <div className="nf-writing-settings-fields">
           <div className="nf-writing-setting-row" role="group" aria-label={t('settings.fontSize')}>
             <span>{t('settings.fontSize')}</span>
-            <SegmentedControl size="sm" value={appearance.proseFontSize}
+            <OptionCards size="sm" value={appearance.proseFontSize}
               onChange={proseFontSize => onChange({ proseFontSize })}
               items={[{ value: 17, label: '17px' }, { value: 18, label: '18px' }]} />
           </div>
           <div className="nf-writing-setting-row" role="group" aria-label={t('settings.measure')}>
             <span>{t('settings.measure')}</span>
-            <SegmentedControl size="sm" value={appearance.measureWidth}
+            <OptionCards size="sm" value={appearance.measureWidth}
               onChange={measureWidth => onChange({ measureWidth })}
               items={[{ value: 720, label: '720' }, { value: 760, label: '760' }, { value: 800, label: '800' }]} />
           </div>
           <div className="nf-writing-setting-row" role="group" aria-label={t('settings.prosePaper')}>
             <span>{t('settings.prosePaper')}</span>
-            <SegmentedControl size="sm" value={appearance.prosePaper}
+            <OptionCards size="sm" value={appearance.prosePaper}
               onChange={prosePaper => onChange({ prosePaper })}
               items={[
                 { value: 'theme', label: t('settings.prosePaperTheme') },
@@ -55,7 +55,7 @@ export default function WritingAppearanceSection({ appearance, dirty, onChange, 
               <span>{t('settings.listDensity')}</span>
               <p className="text-[var(--color-text-muted)]">{t('settings.listDensityDesc')}</p>
             </div>
-            <SegmentedControl size="sm" value={appearance.listDensity}
+            <OptionCards size="sm" value={appearance.listDensity}
               onChange={listDensity => onChange({ listDensity })}
               items={[
                 { value: 'compact', label: t('settings.listDensityCompact') },

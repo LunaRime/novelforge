@@ -137,6 +137,7 @@ export default function VolumeGroup({
                 className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
                 style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
                 title={t('volume.autoSplit')}
+                aria-label={t('volume.autoSplit')}
               >
                 <Layers size={12} />
               </button>
@@ -147,6 +148,7 @@ export default function VolumeGroup({
               className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
               style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
               title={t('volume.newVolume')}
+              aria-label={t('volume.newVolume')}
             >
               <Plus size={12} />
             </button>

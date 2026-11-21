@@ -178,6 +178,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
           className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
           style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
           title={t('export.batchExportTip')}
+          aria-label={t('export.batchExportTip')}
           onClick={() => openBatchExport()}
         >
           <Archive size={12} />

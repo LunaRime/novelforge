@@ -1,4 +1,4 @@
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { ViewTabs } from '../ui/ChoiceControls'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Database, BookOpen, FileText,
@@ -245,7 +245,7 @@ function KnowledgeOverviewContent({ source, section, onSectionChange }: Knowledg
           )}
         </div>
 
-        <SegmentedControl<KnowledgeSection> value={section} onChange={onSectionChange} className="mt-3 w-fit max-w-full"
+        <ViewTabs<KnowledgeSection> value={section} onChange={onSectionChange} className="mt-3 w-fit max-w-full"
           items={[
             { value: 'overview', label: t('knowledge.overview') },
             { value: 'search', label: t('knowledge.semanticSearch') },

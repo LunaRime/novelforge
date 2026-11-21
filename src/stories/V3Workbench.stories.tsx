@@ -6,7 +6,7 @@ import { Button } from '../components/ui/Button'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/Dialog'
 import { MenuItem } from '../components/ui/MenuItem'
 import MenuRow from '../components/ui/MenuRow'
-import { SegmentedControl } from '../components/ui/SegmentedControl'
+import { ViewTabs } from '../components/ui/ChoiceControls'
 import { useTranslation } from '../hooks/useTranslation'
 import './v3-workbench.story.css'
 
@@ -112,7 +112,7 @@ function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveF
     <div className="v3-workbench-sample" data-mode={mode} data-partner={partnerOpen}>
       <header className="v3-sample-header">
         <h1>雾港来信</h1>
-        <SegmentedControl items={modes} value={mode} onChange={setMode} />
+        <ViewTabs items={modes} value={mode} onChange={setMode} />
         <div className="v3-sample-tools">
           <Button variant="outline" size="sm" aria-expanded={partnerOpen} aria-controls={`${panelId}-partner`}
             onClick={() => setPartnerOpen(current => !current)}>写作搭档</Button>

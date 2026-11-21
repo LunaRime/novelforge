@@ -3,7 +3,7 @@ import { Terminal } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '../ui/Dialog'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { ViewTabs } from '../ui/ChoiceControls'
 import { Spinner } from '../ui/Spinner'
 import { EmptyState } from '../ui/EmptyState'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -73,7 +73,7 @@ export default function DevConsoleDialog({ open, onClose }: { open: boolean; onC
             className="flex flex-shrink-0 items-center gap-3 px-6 py-2.5"
             style={{ borderBottom: '1px solid var(--color-border)' }}
           >
-            <SegmentedControl size="sm" value={tab} onChange={setTab} items={TABS.map((x) => ({ value: x.value, label: t(x.key) }))} />
+            <ViewTabs size="sm" value={tab} onChange={setTab} items={TABS.map((x) => ({ value: x.value, label: t(x.key) }))} />
           </div>
         )}
 

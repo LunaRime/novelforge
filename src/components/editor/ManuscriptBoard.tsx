@@ -6,7 +6,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useDraftStore } from '../../stores/draft-store'
 import { useVolumeStore } from '../../stores/volume-store'
 import { useCharacterStore } from '../../stores/character-store'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { ViewTabs } from '../ui/ChoiceControls'
 import { EmptyState } from '../ui/EmptyState'
 import { Spinner } from '../ui/Spinner'
 import { Button } from '../ui/Button'
@@ -149,7 +149,7 @@ export default function ManuscriptBoard() {
               >
                 <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
               </Button>
-              <SegmentedControl<BoardView>
+              <ViewTabs<BoardView>
                 size="sm"
                 value={view}
                 onChange={setView}

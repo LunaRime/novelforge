@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { EmptyState } from '../ui/EmptyState'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { FilterButtons } from '../ui/ChoiceControls'
 import { Spinner } from '../ui/Spinner'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useProjectStore } from '../../stores/project-store'
@@ -79,7 +79,7 @@ export default function DevModelsTab({ active }: { active: boolean }) {
     <div className="h-full overflow-y-auto px-6 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{t('dev.modelsTitle')}</div>
-        <SegmentedControl
+        <FilterButtons
           size="sm"
           value={range}
           onChange={setRange}

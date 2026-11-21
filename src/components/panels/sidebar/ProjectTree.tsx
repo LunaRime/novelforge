@@ -261,6 +261,7 @@ export default function ProjectTree() {
               className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
               style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
               title={t('board.title')}
+              aria-label={t('board.title')}
               onClick={() => {
                 const state = useEditorStore.getState()
                 const existing = state.tabs.find((tab) => tab.type === 'manuscript-board')

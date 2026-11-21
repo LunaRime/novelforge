@@ -16,7 +16,7 @@ import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import { t, getCurrentLocale } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { FilterButtons } from '../ui/ChoiceControls'
 import { getCurrentLogEnv } from '../../services/render-logger'
 import type { LogEnvMode, LogFileInfo } from '../../shared/ipc-channels'
 
@@ -177,7 +177,7 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
           <DialogTitle>{t('log.title')}</DialogTitle>
           <div className="flex items-center gap-1">
             {/* 环境切换 */}
-            <SegmentedControl
+            <FilterButtons
               value={env}
               onChange={setEnv}
               items={[
