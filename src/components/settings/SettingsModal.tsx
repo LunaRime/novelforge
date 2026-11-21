@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useId, useRef } from 'react'
 import appIcon from '../../../build/icon.png'
 import {
   X, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, MessageSquare,
   ExternalLink, RefreshCw, LogOut,
-  BookMarked, Plug, BarChart3, Search, CircleHelp, Terminal,
+  BookMarked, Plug, BarChart3, Search, CircleHelp, Terminal, Route, Gauge,
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { confirm } from '../ui/Confirm'
@@ -44,6 +44,7 @@ import ThemeSection from './ThemeSection'
 import VectorConfigSection from './VectorConfigSection'
 import DeveloperModeSection from './DeveloperModeSection'
 import UsageStatsView from './UsageStatsView'
+import SupportFeedback from './SupportFeedback'
 import ShortcutsSection from './ShortcutsSection'
 import WritingAppearanceSection from './WritingAppearanceSection'
 import { useUpdateStore } from '../../stores/update-store'
@@ -242,10 +243,15 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             </nav>
           </aside>
           <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden">
-            <header className="nf-settings-section-heading">
-              <h3 ref={headingRef} tabIndex={-1} className="text-lg font-semibold text-[var(--color-text)]">{activeSection?.label}</h3>
-              <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{activeSection?.description}</p>
-            </header>
+            {activeSection && (
+              <header className="nf-settings-section-heading">
+                <span className="nf-settings-heading-icon" aria-hidden="true">{activeSection.icon}</span>
+                <div className="min-w-0">
+                  <h3 ref={headingRef} tabIndex={-1} className="text-xl font-semibold text-[var(--color-text)]">{activeSection.label}</h3>
+                  <p className="text-xs leading-relaxed text-[var(--color-text-secondary)]">{activeSection.description}</p>
+                </div>
+              </header>
+            )}
 
             {/* 区域内容 */}
             <div className="nf-settings-content" key={section}>
@@ -253,18 +259,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 <div className="nf-settings-stack">
                   {/* 供应商账户集中管理凭据和模型，下面独立配置调度与运行策略。 */}
                   <ModelListSection />
-                  <section className="nf-settings-panel">
-                    <ModelRoutingSection />
-                  </section>
-                  <section className="nf-settings-panel">
-                    <ConcurrencySection />
-                  </section>
-                  <section className="nf-settings-panel">
-                    <AutomationSection />
-                  </section>
-                  <section className="nf-settings-panel">
-                    <ContextCompactionSection />
-                  </section>
+                  <ModelRoutingSection />
+                  <ConcurrencySection />
+                  <AutomationSection />
+                  <ContextCompactionSection />
                 </div>
               )}
               {section === 'usage' && <UsageStatsView />}
@@ -336,13 +334,13 @@ export function ModelRoutingSection() {
   const editingMeta = editingTier ? tiers.find(x => x.id === editingTier) ?? null : null
 
   return (
-    <div
-      className="rounded-xl p-4"
-      style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-    >
+    <section className="nf-settings-panel">
       {/* 标题独占一行在上（用户：标题在上面）；动态路由开关收在同排右侧、标题行不再挂说明文字 */}
-      <div className="flex items-start justify-between gap-3">
-        <h3 className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.routeTitle')}</h3>
+      <header className="nf-settings-resource-bar">
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+          <Route size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
+          {t('settings.routeTitle')}
+        </h4>
         <div className="flex items-center gap-2 flex-shrink-0">
           <span className="text-xs cursor-default" style={{ color: 'var(--color-text-secondary)' }}>
             {t('settings.routeDynamic')}
@@ -353,7 +351,7 @@ export function ModelRoutingSection() {
             onCheckedChange={(v) => updateModelRoutes({ strategy: v ? 'dynamic' : 'static' })}
           />
         </div>
-      </div>
+      </header>
 
       {/* 说明折叠在标题下面（口径不变：三层说明 + 优先级说明 + 动态路由说明） */}
       <div className="mt-2">
@@ -380,13 +378,13 @@ export function ModelRoutingSection() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h4
+                  <h5
                     className="text-xs font-medium truncate"
                     style={{ color: 'var(--color-text)' }}
                     title={tier.desc}
                   >
                     {tier.label}
-                  </h4>
+                  </h5>
                   {/* ⚠️ 2026-10-16 用户要求：卡片上**不显示模型型号信息**（此前在这里列
                       「N 个模型 · 首选 <模型名>」+ 层内 ①②③ 型号芯片）。现在只给数量/回退口径，
                       选了哪些、什么顺序一律进「编辑优先级」弹窗看。
@@ -428,7 +426,7 @@ export function ModelRoutingSection() {
           onClose={() => setEditingTier(null)}
         />
       )}
-    </div>
+    </section>
   )
 }
 
@@ -442,6 +440,8 @@ function ConcurrencySection() {
   const [maxConcurrent, setMaxConcurrent] = useState(status.maxConcurrent)
   const [maxQueueSize, setMaxQueueSize] = useState(status.maxQueueSize)
   const [saving, setSaving] = useState(false)
+  const maxConcurrentId = useId()
+  const maxQueueId = useId()
 
   // 挂载时拉取主进程当前并发状态——用户已修改时不覆盖（刷新返回晚于用户输入的竞态，P2 修复）
   const userEditedRef = useRef(false)
@@ -468,12 +468,14 @@ function ConcurrencySection() {
   }
 
   return (
-    <div
-      className="rounded-xl p-4 space-y-4"
-      style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-    >
+    <section className="nf-settings-panel space-y-3">
+      <header className="nf-settings-resource-bar">
+        <h4 className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+          <Gauge size={16} className="shrink-0 text-[var(--color-accent)]" aria-hidden="true" />
+          {t('settings.concurrencyTitle')}
+        </h4>
+      </header>
       <div className="space-y-1">
-        <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.concurrencyTitle')}</p>
         <Disclosure label={t('settings.cardHint')}>
           <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
             {t('settings.concurrencyDesc')}
@@ -481,10 +483,11 @@ function ConcurrencySection() {
         </Disclosure>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
         <div className="space-y-1">
-          <Label>{t('settings.concurrencyMax')}</Label>
+          <Label htmlFor={maxConcurrentId}>{t('settings.concurrencyMax')}</Label>
           <Input
+            id={maxConcurrentId}
             type="number"
             min={1}
             max={20}
@@ -494,8 +497,9 @@ function ConcurrencySection() {
           <p className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('settings.concurrencyMaxDesc')}</p>
         </div>
         <div className="space-y-1">
-          <Label>{t('settings.concurrencyQueue')}</Label>
+          <Label htmlFor={maxQueueId}>{t('settings.concurrencyQueue')}</Label>
           <Input
+            id={maxQueueId}
             type="number"
             min={1}
             max={500}
@@ -512,7 +516,7 @@ function ConcurrencySection() {
           {t('action.save')}
         </Button>
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -836,7 +840,7 @@ function AboutSection() {
   }
 
   return (
-    <div className="space-y-6 max-w-[640px] p-2">
+    <div className="nf-settings-about">
       {/* 品牌标识 */}
       <div className="flex flex-col items-center justify-center py-10 rounded-xl space-y-3" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
         <img src={appIcon} width={52} height={52} alt="" />
@@ -918,7 +922,9 @@ function AboutSection() {
         )}
       </div>
 
-      {/* 帮助操作（原原生菜单「帮助」） */}
+      <SupportFeedback />
+
+      {/* 其他应用支持操作 */}
       <div
         className="rounded-lg p-4 space-y-4"
         style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}

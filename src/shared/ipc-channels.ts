@@ -1601,6 +1601,11 @@ export interface LogChannels {
     args: []
     return: { success: boolean; error?: string }
   }
+  'log:export-feedback': {
+    args: []
+    return: { status: 'saved'; path: string; count: number } | { status: 'cancelled' | 'empty' | 'failed' }
+  }
+  'log:open-issues': { args: []; return: { success: boolean } }
 }
 
 // ===== 作品记忆频道（三级摘要文件：章节/分卷/全书 + 跨会话共享事实，.novelforge/memory/*.md） =====

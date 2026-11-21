@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  AlertTriangle, BarChart3, Clock3, Gauge, Layers3, MessageSquare,
-  Palette, RefreshCw, Sparkles, Zap,
+  AlertTriangle, BarChart3, Braces, CalendarDays, Clock3, Coins, Cpu, Database, FolderOpen,
+  Gauge, Grid2X2, MessageSquare, MessagesSquare, Palette, RefreshCw, Target,
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { Table } from '../ui/Table'
@@ -200,10 +200,15 @@ export default function UsageStatsView() {
     <div className="space-y-4">
       {/* 页头 */}
       <div className="flex items-start justify-between gap-3 flex-wrap">
-        <div>
-          <h2 className="text-lg font-semibold" style={{ color: 'var(--color-text)' }}>{t('usage.insightsTitle')}</h2>
-          <p className="mt-0.5 text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('usage.insightsDesc')}</p>
-        </div>
+        <ViewTabs<UsageView>
+          size="sm"
+          value={view}
+          onChange={setView}
+          items={[
+            { value: 'current', label: t('usage.tabCurrent') },
+            { value: 'global', label: t('usage.tabGlobal') },
+          ]}
+        />
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             variant="outline"
@@ -212,17 +217,8 @@ export default function UsageStatsView() {
           >
             <Palette size={12} /> {t('usage.styleSettings')}
           </Button>
-          <ViewTabs<UsageView>
-            size="sm"
-            value={view}
-            onChange={setView}
-            items={[
-              { value: 'current', label: t('usage.tabCurrent') },
-              { value: 'global', label: t('usage.tabGlobal') },
-            ]}
-          />
-          <Button variant="ghost" size="icon" onClick={handleRefresh} title={t('action.refresh')}>
-            <RefreshCw size={14} className={(loading || globalLoading) ? 'animate-spin' : ''} />
+          <Button variant="ghost" size="icon" onClick={handleRefresh} aria-label={t('action.refresh')} title={t('action.refresh')}>
+            <RefreshCw size={14} aria-hidden="true" className={(view === 'current' ? loading : globalLoading) ? 'motion-safe:animate-spin' : ''} />
           </Button>
         </div>
       </div>
@@ -258,19 +254,20 @@ export default function UsageStatsView() {
       ) : data && totals ? (
         <>
           {/* 六个概要卡 */}
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
-            <StatCard icon={<MessageSquare size={14} />} label={t('usage.activeSessions')} value={formatNumber(sessions.length)} sub={t('usage.recentSessions')} />
-            <StatCard icon={<Zap size={14} />} label={t('usage.totalTokens')} value={formatCompact(totals.tokens)} sub={`${formatNumber(totals.tokens)} tokens`} />
-            <StatCard icon={<Gauge size={14} />} label={t('usage.totalCost')} value={formatCost(totals.cost)} sub={`${t('usage.totalCalls')} ${formatNumber(totals.calls)}`} />
-            <StatCard icon={<Layers3 size={14} />} label={t('usage.cacheHit')} value={`${cacheRate.toFixed(1)}%`} sub={`${formatCompact(totals.cachedTokens)} tokens`} tone={cacheRate > 0 ? 'success' : 'muted'} />
-            <StatCard icon={<Sparkles size={14} />} label={t('usage.modelCalls')} value={formatNumber(totals.calls)} sub={`${data.byModel.length} ${t('usage.model')}`} />
-            <StatCard icon={<Clock3 size={14} />} label={t('usage.activeTime')} value={formatDuration(totals.durationMs)} sub={t('usage.perCall').replace('{n}', formatDuration(totals.calls > 0 ? totals.durationMs / totals.calls : 0))} />
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-2">
+            <StatCard icon={<MessagesSquare size={16} />} label={t('usage.activeSessions')} value={formatNumber(sessions.length)} sub={t('usage.recentSessions')} />
+            <StatCard icon={<Braces size={16} />} label={t('usage.totalTokens')} value={formatCompact(totals.tokens)} sub={`${formatNumber(totals.tokens)} ${t('usage.tokenUnit')}`} />
+            <StatCard icon={<Coins size={16} />} label={t('usage.totalCost')} value={formatCost(totals.cost)} sub={`${t('usage.totalCalls')} ${formatNumber(totals.calls)}`} />
+            <StatCard icon={<Database size={16} />} label={t('usage.cacheHit')} value={`${cacheRate.toFixed(1)}%`} sub={`${formatCompact(totals.cachedTokens)} ${t('usage.tokenUnit')}`} tone={cacheRate > 0 ? 'success' : 'muted'} />
+            <StatCard icon={<Cpu size={16} />} label={t('usage.modelCalls')} value={formatNumber(totals.calls)} sub={`${data.byModel.length} ${t('usage.model')}`} />
+            <StatCard icon={<Clock3 size={16} />} label={t('usage.activeTime')} value={formatDuration(totals.durationMs)} sub={t('usage.perCall').replace('{n}', formatDuration(totals.calls > 0 ? totals.durationMs / totals.calls : 0))} />
           </div>
 
           {/* 近 7 天 */}
           <SectionCard
             title={t('usage.last7Days')}
-            action={<span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('usage.outputSpeed').replace('{n}', outputSpeed.toFixed(1))}</span>}
+            icon={<CalendarDays size={15} />}
+            action={<span className="flex items-center gap-1.5 text-micro text-[var(--color-text-secondary)]"><Gauge size={13} aria-hidden="true" />{t('usage.outputSpeed').replace('{n}', outputSpeed.toFixed(1))}</span>}
           >
             <div className="flex h-[148px] items-end gap-2">
               {daily7.length === 0 ? (
@@ -280,7 +277,7 @@ export default function UsageStatsView() {
                   <div className="flex h-[118px] items-end justify-center gap-0.5">
                     <div
                       className="w-2 rounded-t"
-                      title={`${formatNumber(row.tokens)} tokens`}
+                      title={`${formatNumber(row.tokens)} ${t('usage.tokenUnit')}`}
                       style={{ height: `${Math.max(row.tokens > 0 ? 3 : 0, (row.tokens / maxDailyTokens) * 100)}%`, backgroundColor: 'var(--color-accent)' }}
                     />
                     <div
@@ -294,22 +291,23 @@ export default function UsageStatsView() {
               ))}
             </div>
             <div className="mt-2 flex items-center gap-3 text-micro" style={{ color: 'var(--color-text-muted)' }}>
-              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ backgroundColor: 'var(--color-accent)' }} />tokens</span>
+              <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ backgroundColor: 'var(--color-accent)' }} />{t('usage.tokenUnit')}</span>
               <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-sm" style={{ backgroundColor: 'var(--color-success)' }} />USD</span>
             </div>
           </SectionCard>
 
           {/* Token / 耗时 */}
           <div className="grid gap-3 xl:grid-cols-2">
-            <SectionCard title={t('usage.tokenStats')}>
+            <SectionCard title={t('usage.tokenStats')} icon={<Braces size={15} />}>
               <DonutPanel
                 segments={tokenSegments}
                 centerValue={formatCompact(totals.tokens)}
-                centerLabel="tokens"
+                centerLabel={t('usage.tokenUnit')}
               />
             </SectionCard>
             <SectionCard
               title={t('usage.durationStats')}
+              icon={<Clock3 size={15} />}
               action={<span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{formatDuration(totals.durationMs)}</span>}
             >
               <DonutPanel
@@ -321,7 +319,7 @@ export default function UsageStatsView() {
           </div>
 
           {/* 活跃度热力图 */}
-          <SectionCard title={t('usage.activityTitle')} action={<CountBadge value={sessions.length} unit={t('unit.items')} />}>
+          <SectionCard title={t('usage.activityTitle')} icon={<Grid2X2 size={15} />} action={<CountBadge value={sessions.length} unit={t('unit.items')} />}>
             <div className="overflow-x-auto pb-1">
               <div
                 className="grid gap-1"
@@ -356,6 +354,7 @@ export default function UsageStatsView() {
           <div className="grid gap-3 xl:grid-cols-3">
             <SectionCard
               title={t('usage.recentSessions')}
+              icon={<MessagesSquare size={15} />}
               action={<Button variant="ghost" size="sm" onClick={() => useLayoutStore.getState().openRightPanel('agent')}>{t('agent.aiPanel')}</Button>}
             >
               {sessions.length === 0 ? (
@@ -373,8 +372,8 @@ export default function UsageStatsView() {
               )}
             </SectionCard>
 
-            <DistributionCard title={t('usage.purposeDistribution')} rows={data.byPurpose.map(row => ({ key: row.purpose || '—', label: row.purpose || '—', value: row.tokens, cost: row.cost, calls: row.calls }))} />
-            <DistributionCard title={t('usage.modelDistribution')} rows={data.byModel.map(row => ({ key: row.model || '—', label: row.model || '—', value: row.tokens, cost: row.cost, calls: row.calls }))} />
+            <DistributionCard title={t('usage.purposeDistribution')} icon={<Target size={15} />} rows={data.byPurpose.map(row => ({ key: row.purpose || '—', label: row.purpose || '—', value: row.tokens, cost: row.cost, calls: row.calls }))} />
+            <DistributionCard title={t('usage.modelDistribution')} icon={<Cpu size={15} />} rows={data.byModel.map(row => ({ key: row.model || '—', label: row.model || '—', value: row.tokens, cost: row.cost, calls: row.calls }))} />
           </div>
         </>
       ) : null}
@@ -396,16 +395,16 @@ function GlobalUsageView({ data, loading, error, onRetry }: {
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
-        <StatCard icon={<Sparkles size={14} />} label={t('usage.totalCalls')} value={formatNumber(data.total.calls)} sub={t('usage.tabGlobal')} />
-        <StatCard icon={<Gauge size={14} />} label={t('usage.totalCost')} value={formatCost(data.total.cost)} sub={t('usage.tabGlobal')} />
-        <StatCard icon={<Layers3 size={14} />} label={t('usage.cachedTokens')} value={formatCompact(data.total.cachedTokens)} sub="tokens" tone="success" />
+        <StatCard icon={<Cpu size={16} />} label={t('usage.totalCalls')} value={formatNumber(data.total.calls)} />
+        <StatCard icon={<Coins size={16} />} label={t('usage.totalCost')} value={formatCost(data.total.cost)} />
+        <StatCard icon={<Database size={16} />} label={t('usage.cachedTokenCount')} value={formatCompact(data.total.cachedTokens)} sub={t('usage.tokenUnit')} tone="success" />
       </div>
       {data.degradedProjects.length > 0 && (
         <p className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-warning)' }}>
           <AlertTriangle size={12} /> {t('usage.degradedNotice')}
         </p>
       )}
-      <SectionCard title={t('usage.globalProjectsTitle')}>
+      <SectionCard title={t('usage.globalProjectsTitle')} icon={<FolderOpen size={15} />}>
         <Table
           nowrapCells
           headers={[t('usage.project'), t('usage.calls'), t('usage.promptTokens'), t('usage.completionTokens'), t('usage.cachedTokens'), t('usage.cost'), t('usage.status')]}
@@ -423,27 +422,30 @@ function StatCard({ icon, label, value, sub, tone = 'accent' }: {
   icon: ReactNode
   label: string
   value: string
-  sub: string
+  sub?: string
   tone?: 'accent' | 'success' | 'muted'
 }) {
   const color = tone === 'success' ? 'var(--color-success)' : tone === 'muted' ? 'var(--color-text-muted)' : 'var(--color-accent)'
   return (
-    <div className="nf-settings-panel">
-      <div className="flex items-center gap-1.5 text-micro" style={{ color: 'var(--color-text-muted)' }}>
-        <span className="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--color-editor-bg)]" style={{ color }}>{icon}</span>
-        <span className="truncate">{label}</span>
+    <div className="nf-settings-panel flex items-start gap-2.5">
+      <span aria-hidden="true" className="grid size-8 shrink-0 place-items-center rounded-md border border-[var(--color-border)] bg-[var(--color-editor-bg)]" style={{ color }}>{icon}</span>
+      <div className="min-w-0">
+        <div className="text-micro leading-snug text-[var(--color-text-secondary)]">{label}</div>
+        <div className="mt-0.5 text-lg font-semibold leading-tight tabular-nums text-[var(--color-text)]">{value}</div>
+        {sub && <div className="mt-1 text-micro leading-snug text-[var(--color-text-secondary)]">{sub}</div>}
       </div>
-      <div className="mt-1 text-lg font-semibold tabular-nums" style={{ color: 'var(--color-text)' }}>{value}</div>
-      <div className="mt-0.5 truncate text-micro" style={{ color: 'var(--color-text-muted)' }}>{sub}</div>
     </div>
   )
 }
 
-function SectionCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+function SectionCard({ title, icon, action, children }: { title: string; icon: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <section className="nf-settings-panel">
       <header className="nf-settings-resource-bar mb-3">
-        <h3 className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{title}</h3>
+        <h4 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
+          <span aria-hidden="true" className="shrink-0 text-[var(--color-accent)]">{icon}</span>
+          {title}
+        </h4>
         {action}
       </header>
       {children}
@@ -503,15 +505,16 @@ function Donut({ segments, centerValue, centerLabel }: { segments: DonutSegment[
   )
 }
 
-function DistributionCard({ title, rows }: {
+function DistributionCard({ title, icon, rows }: {
   title: string
+  icon: ReactNode
   rows: Array<{ key: string; label: string; value: number; cost: number; calls: number }>
 }) {
   const { t } = useTranslation()
   const sorted = [...rows].sort((a, b) => b.value - a.value).slice(0, 6)
   const max = Math.max(1, ...sorted.map(row => row.value))
   return (
-    <SectionCard title={title}>
+    <SectionCard title={title} icon={icon}>
       {sorted.length === 0 ? (
         <p className="py-4 text-center text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('usage.noData')}</p>
       ) : (
@@ -520,7 +523,7 @@ function DistributionCard({ title, rows }: {
             <div key={row.key}>
               <div className="flex items-center gap-2 text-micro">
                 <span className="min-w-0 flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }} title={row.label}>{row.label}</span>
-                <span className="flex-shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{formatCompact(row.value)} tokens</span>
+                <span className="flex-shrink-0 tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{formatCompact(row.value)} {t('usage.tokenUnit')}</span>
                 <span className="w-14 flex-shrink-0 text-right tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{formatCost(row.cost)}</span>
               </div>
               <div className="mt-1 h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--color-hover)' }}>

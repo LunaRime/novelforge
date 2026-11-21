@@ -43,6 +43,8 @@ export interface VectorTestResult {
   modelDetail: string
   /** LLM 向量化详情 */
   llmEmbeddingDetail: string
+  /** 记录未运行的检查，旧记录保留当时的结果。 */
+  skipped?: Array<'model' | 'llm' | 'agent'>
   /** 测试时间戳 */
   testedAt: string
 }
@@ -211,6 +213,7 @@ export const useVectorConfigStore = create<VectorConfigState>()((set, get) => ({
   testConnection: async () => {
     set({ testing: true })
 
+    const skipped: NonNullable<VectorTestResult['skipped']> = []
     const result: VectorTestResult = {
       moduleOk: false,
       modelOk: false,
@@ -219,6 +222,7 @@ export const useVectorConfigStore = create<VectorConfigState>()((set, get) => ({
       moduleDetail: '',
       modelDetail: '',
       llmEmbeddingDetail: '',
+      skipped,
       testedAt: new Date().toISOString(),
     }
 
@@ -259,6 +263,7 @@ export const useVectorConfigStore = create<VectorConfigState>()((set, get) => ({
         } else {
           result.modelOk = false
           result.modelDetail = t('vector.notConfigured')
+          skipped.push('model')
         }
       } else {
         result.modelOk = false
@@ -288,10 +293,12 @@ export const useVectorConfigStore = create<VectorConfigState>()((set, get) => ({
       }
     } else {
       result.llmEmbeddingDetail = t('vector.llmNotEnabled')
+      skipped.push('llm')
     }
 
     // 4. 测试 AI 是否能调用向量工具
     // （检查 embedding:compare 和 kb:search 通道是否可用）
+    if (!result.moduleOk && !result.modelOk) skipped.push('agent')
     try {
       if (result.moduleOk) {
         // FTS 搜索测试

@@ -99,16 +99,16 @@ describe('IPC 通道对账（L4 §6 第 1 类）', () => {
   })
 
   it('④ 通道数量快照（防无声增删；新增通道时同步更新）', () => {
-    // 正式稿下划线新增一个 invoke 通道，类型声明另包含八个主进程事件。
-    expect(registered.size).toBe(295)
-    expect(declared.size).toBe(303)
+    // 正式稿下划线和反馈功能增加三个 invoke 通道，类型声明另包含八个主进程事件。
+    expect(registered.size).toBe(297)
+    expect(declared.size).toBe(305)
   })
 
   it('⑤ 策略表与已注册集合双向一致', () => {
     const policyKeys = new Set(Object.keys(IPC_CHANNEL_POLICY))
     expect([...registered.keys()].filter(c => !policyKeys.has(c)), '已注册但策略表未登记').toEqual([])
     expect([...policyKeys].filter(c => !registered.has(c)), '策略表登记了未注册的通道').toEqual([])
-    expect(policyKeys.size).toBe(295)
+    expect(policyKeys.size).toBe(297)
   })
 
   it('⑥ 事件通道清单 === 声明中「非注册」的那部分（运行时清单与类型侧双向一致）', () => {

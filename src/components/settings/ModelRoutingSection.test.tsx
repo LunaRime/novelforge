@@ -81,8 +81,8 @@ describe('ModelRoutingSection 层卡排版', () => {
     const details = el.querySelector('details')
     expect(details).toBeTruthy()
     expect(details!.querySelector('summary')!.textContent).toContain('说明')
-    // 标题是块级 h3（独占行），**不与动态路由开关同容器**：开关在标题的兄弟节点里
-    const title = el.querySelector('h3')!
+    // 路由卡片标题位于分区标题下一级，开关在同一个页头内。
+    const title = el.querySelector('header > h4')!
     expect(title.textContent).toBe('模型路由（分层调度）')
     expect(title.parentElement!.querySelector('[role="switch"]')).toBeTruthy()
   })

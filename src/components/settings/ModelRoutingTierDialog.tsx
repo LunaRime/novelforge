@@ -19,7 +19,7 @@
  * （项目惯例，见 `ModelPickerDialog` 的注释）。
  */
 import { useState } from 'react'
-import { ArrowDown, ArrowUp, X } from 'lucide-react'
+import { MoveDown, MoveUp, X } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { Button } from '../ui/Button'
 import {
@@ -181,7 +181,7 @@ export function ModelRoutingTierDialog({
                         className="flex items-center justify-center rounded transition-colors hover:bg-[var(--color-hover)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent flex-shrink-0"
                         style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
                       >
-                        <ArrowUp size={12} />
+                        <MoveUp size={14} aria-hidden="true" />
                       </button>
                       <button
                         type="button"
@@ -192,7 +192,7 @@ export function ModelRoutingTierDialog({
                         className="flex items-center justify-center rounded transition-colors hover:bg-[var(--color-hover)] disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent flex-shrink-0"
                         style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
                       >
-                        <ArrowDown size={12} />
+                        <MoveDown size={14} aria-hidden="true" />
                       </button>
                       <button
                         type="button"

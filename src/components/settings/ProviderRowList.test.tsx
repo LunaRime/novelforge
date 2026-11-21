@@ -123,6 +123,26 @@ function setValue(input: HTMLInputElement, value: string) {
 const tick = () => new Promise((r) => setTimeout(r, 10))
 
 describe('ProviderRowList 供应商行列表', () => {
+  it('按名称排序仅重排行，保持编辑中的密钥草稿与原有账户顺序', async () => {
+    state.providers = [OPENAI, CUSTOM]
+    state.credentialInfo = { CUSTOM_API_KEY: CONFIGURED }
+    const el = render()
+
+    await act(async () => { buttonByLabel('编辑')[1].click() })
+    await act(async () => { setValue(keyInput(), 'sk-draft') })
+
+    const sort = el.querySelector<HTMLSelectElement>('select[aria-label="模型列表排序"]')
+    expect(sort).not.toBeNull()
+    await act(async () => {
+      sort!.value = 'name'
+      sort!.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    expect(el.textContent!.indexOf('Acme Gateway')).toBeLessThan(el.textContent!.indexOf('OpenAI'))
+    expect(keyInput().value).toBe('sk-draft')
+    expect(state.providers.map((account) => account.id)).toEqual([OPENAI.id, CUSTOM.id])
+  })
+
   it('行 = 名称 +（自定义标签）+ 三态灯 + [编辑][删除]；describe 未回的行无灯', () => {
     state.providers = [CUSTOM, OPENAI]
     state.credentialInfo = { CUSTOM_API_KEY: CONFIGURED } // OPENAI_API_KEY 还没查到

@@ -128,10 +128,25 @@
 }
 
 .nf-settings-section-heading {
+  display: flex;
   flex: none;
-  padding: 1rem clamp(1rem, 3cqi, 2rem);
+  align-items: center;
+  gap: 0.875rem;
+  padding: 1.125rem clamp(1rem, 3cqi, 2rem);
   border-block-end: 1px solid var(--color-border);
-  background: var(--color-editor-bg);
+  background: var(--color-canvas);
+}
+
+.nf-settings-heading-icon {
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  flex: none;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 22%, var(--color-border));
+  border-radius: var(--radius-lg);
+  background: color-mix(in srgb, var(--color-accent) 9%, var(--color-panel));
+  color: var(--color-accent);
 }
 
 .nf-settings-content {
@@ -142,6 +157,13 @@
 }
 
 .nf-settings-stack { display: grid; gap: 1rem; }
+
+.nf-settings-about {
+  display: grid;
+  width: min(100%, 40rem);
+  gap: 1.25rem;
+  margin-inline: auto;
+}
 
 .nf-settings-panel {
   min-width: 0;
@@ -160,6 +182,32 @@
   padding-block-end: 0.75rem;
   border-block-end: 1px solid var(--color-border);
 }
+
+.nf-settings-sort {
+  display: inline-grid;
+  position: relative;
+  max-width: 100%;
+  align-items: center;
+  color: var(--color-text-secondary);
+}
+
+.nf-settings-sort select {
+  min-height: 2rem;
+  appearance: none;
+  padding-inline: 1.875rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-editor-bg);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  cursor: pointer;
+}
+
+.nf-settings-sort select:hover { border-color: var(--color-accent); }
+.nf-settings-sort select option { background: var(--color-panel); }
+.nf-settings-sort svg { position: absolute; pointer-events: none; }
+.nf-settings-sort svg:first-child { inset-inline-start: 0.625rem; }
+.nf-settings-sort svg:last-child { inset-inline-end: 0.625rem; }
 
 /* 窄窗口把设置目录移到正文上方，当前分区与搜索始终可从键盘访问。 */
 @container settings-window (max-width: 41rem) {

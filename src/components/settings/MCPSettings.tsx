@@ -4,7 +4,7 @@
  * 配置文件：~/.novelforge/mcp_config.json（Claude Desktop 兼容格式）
  */
 import { useState, useEffect, useCallback } from 'react'
-import { Plus, Trash2, Plug, Unplug, Server } from 'lucide-react'
+import { Trash2, Plug, Unplug, Server } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { useSettingsDirty } from './settings-dirty'
 import { toast } from '../ui/Toast'
@@ -12,6 +12,7 @@ import { confirm } from '../ui/Confirm'
 import { EmptyState } from '../ui/EmptyState'
 import { Input } from '../ui/Input'
 import { Button } from '../ui/Button'
+import { CreateIcon } from '../ui/ActionIcons'
 import { useTranslation } from '../../hooks/useTranslation'
 
 interface MCPServerConfig {
@@ -152,7 +153,7 @@ export default function MCPSettings() {
           {servers.length}
         </span>
         <Button type="button" className="min-h-8" aria-expanded={showAdd} onClick={() => setShowAdd(v => !v)}>
-          <Plus size={14} aria-hidden="true" />
+          <CreateIcon size={14} />
           {t('mcp.addServer')}
         </Button>
       </header>
