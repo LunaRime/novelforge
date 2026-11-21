@@ -15,15 +15,15 @@ export default function WritingCompanion() {
   const outputActive = useWorkflowStore(state => state.activeRuns.some(run =>
     (run.status === 'running' || run.status === 'waiting') && (state.isRunCurrent?.(run.id) ?? true)))
   const views = [
-    ['agent', MessageSquare, t('workbench.chat'), t('workbench.chat')],
+    ['agent', MessageSquare, t('agent.aiPanel'), t('agent.conversationShort')],
     ['ai-output', ScrollText, t('agent.aiOutput'), t('workbench.output')],
   ] as const satisfies ReadonlyArray<readonly [RightView, typeof MessageSquare, string, string]>
 
   return (
-    <section className="nf-companion" aria-label={t('agent.aiPanel')}>
+    <section className="nf-companion" aria-label={t('panel.writingPartner')}>
       <header className="nf-companion-heading">
         <span className="nf-companion-mark"><Sparkles size={16} aria-hidden="true" /></span>
-        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold" title={t('agent.aiPanel')}>{t('agent.aiPanel')}</h2>
+        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold" title={t('panel.writingPartner')}>{t('panel.writingPartner')}</h2>
         <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
           aria-label={t('tip.closePanel')} title={t('tip.closePanel')}
           onClick={() => {

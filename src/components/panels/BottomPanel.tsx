@@ -51,7 +51,7 @@ export default function BottomPanel() {
               active={effectiveTab === id} aria-pressed={effectiveTab === id} title={label} aria-label={label}
               onClick={() => openBottomTab(id)}>
               <Icon size={14} aria-hidden="true" />
-              <span className="truncate">{label}</span>
+              <span className="nf-workbench-view-label truncate">{label}</span>
               {count > 0 && <CountBadge value={count} tone={id === 'tasks' && hasWaiting && !hasRunning ? 'warning' : 'accent'} />}
             </Button>
           ))}

@@ -248,6 +248,7 @@ export const agentTexts = {
   'agent.comingSoon': { 'zh-CN': '即将', 'en-US': 'Coming soon', 'ru-RU': 'Скоро' },
   'agent.aiOutput': { 'zh-CN': '工作流输出', 'en-US': 'Workflow Output', 'ru-RU': 'Вывод рабочего процесса' },
   'agent.aiPanel': { 'zh-CN': 'Agent 对话', 'en-US': 'Agent Chat', 'ru-RU': 'Чат агента' },
+  'agent.conversationShort': { 'zh-CN': '对话', 'en-US': 'Chat', 'ru-RU': 'Чат' },
   'agent.noOutput': { 'zh-CN': '暂无输出', 'en-US': 'No output', 'ru-RU': 'Нет вывода' },
   'agent.outputRecovered': { 'zh-CN': '已从本地文件恢复中断输出', 'en-US': 'Interrupted output recovered from disk', 'ru-RU': 'Прерванный вывод восстановлен с диска' },
   'agent.outputTailOnly': { 'zh-CN': '仅显示尾部', 'en-US': 'tail only', 'ru-RU': 'только хвост вывода' },

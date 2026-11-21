@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import {
   Plus,
   ChevronDown,
@@ -33,12 +33,8 @@ import {
   type MentionTarget,
 } from '../../../services/agent/intent-router'
 
-/** 输入框最大高度（px），超出后框内滚动 */
-const MAX_HEIGHT = 200
-
 /**
- * Agent 输入框组件（参考 agent1.html 第 69-155 行）
- * 卡片式圆角容器，底部工具栏含模式/模型/发送
+ * 写作搭档输入区。输入草稿按当前项目会话和对话隔离。
  */
 export default function AgentInputBox() {
   const scope = useAgentPanelScope()
@@ -157,41 +153,6 @@ function AgentComposer() {
   // 上下文菜单浮在整个窗口之上（锚点：+ 按钮容器；须在 contextRef 之后声明）
   const contextMenuRef = useFloatingPosition<HTMLDivElement>(contextRef, showContextMenu, { placement: 'above', align: 'start' })
 
-  // 调整文本框高度的通用函数
-  const adjustHeight = useCallback(() => {
-    const ta = textareaRef.current
-    if (!ta) return
-    // 先重置为 0px，让 scrollHeight 正确反映内容高度，避免 flex 布局拉伸导致计算出很大的初始高度
-    ta.style.height = '0px'
-    const next = Math.min(Math.max(ta.scrollHeight, 36), MAX_HEIGHT)
-    ta.style.height = next + 'px'
-    // 超出最大高度时框内滚动，否则隐藏滚动条
-    ta.style.overflowY = ta.scrollHeight > MAX_HEIGHT ? 'auto' : 'hidden'
-  }, [])
-
-  // 监听尺寸变化以重新计算高度，避免刚挂载时宽度未稳定导致的 placeholder 异常换行撑起高度
-  useEffect(() => {
-    const ta = textareaRef.current
-    if (!ta) {
-      adjustHeight()
-      return
-    }
-    const ro = new ResizeObserver(() => {
-      adjustHeight()
-    })
-    ro.observe(ta)
-    
-    // 初始化调用一次即可
-    adjustHeight()
-
-    return () => ro.disconnect()
-  }, [adjustHeight])
-
-  // 内容变化时重新调整高度
-  useEffect(() => {
-    adjustHeight()
-  }, [inputText, adjustHeight])
-
   // 点击外部关闭下拉（用 useOutsideClick 统一管理三个 ref）
   // 关闭 + 菜单时同时收起工作流命令展开态——下次打开从折叠状态开始
   useOutsideClick(contextRef, () => {
@@ -264,16 +225,8 @@ function AgentComposer() {
             placeholder={t('agent.placeholder')}
             aria-label={t('agent.placeholder')}
             rows={1}
-            className="w-full resize-none outline-none bg-transparent text-xs leading-relaxed px-2 py-2"
-            style={{
-              color: 'var(--color-text)',
-              minHeight: 36,
-              maxHeight: MAX_HEIGHT,
-              overflowY: 'hidden',
-              display: 'block',
-            }}
+            className="nf-agent-composer-field block w-full resize-none bg-transparent px-2 py-2 text-xs leading-relaxed outline-none"
           />
-        {/* 占位文字颜色已通过 tailwind placeholder 设置 */}
 
         {/* 三个辅助菜单：一律浮在整个窗口之上（useFloatingPosition 以输入区容器为锚点计算坐标） */}
         {showSlashMenu && (

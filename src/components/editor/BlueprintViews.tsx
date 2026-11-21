@@ -104,7 +104,7 @@ export function BlueprintDetail({ selected, canWrite, saving, deleting, updateFi
         <fieldset className="min-w-0 max-w-2xl mx-auto px-5 py-4" disabled={deleting}>
           {/* 详情页将章节标题与写入操作放在同一页首，窄栏可以自然换行。 */}
           <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-border)] pb-3">
-            <h3 className="min-w-0 break-words font-[var(--font-writing)] text-xl font-semibold text-[var(--color-text)]">
+            <h3 className="min-w-0 break-words font-[family-name:var(--font-writing)] text-xl font-semibold text-[var(--color-text)]">
               {t('import.chapterLabel').replace('{n}', String(selected.chapterNumber)).replace('{title}', selected.title || t('chapter.unnamed'))}
             </h3>
             <div className="flex items-center gap-1.5">

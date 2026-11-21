@@ -62,7 +62,7 @@ export default function WorkbenchHeader() {
             <Button type="button" variant="ghost" className="nf-workbench-switch" data-workbench-toggle="companion"
               aria-expanded={aiPanelOpen} aria-label={t('command.toggleAgent')} title={t('command.toggleAgent')} onClick={layout.toggleAIPanel}>
               <Sparkles size={16} aria-hidden="true" />
-              <span className="nf-workbench-action-label">{t('agent.aiPanel')}</span>
+              <span className="nf-workbench-action-label">{t('panel.writingPartner')}</span>
             </Button>
           </>}
           <div className="nf-workbench-appearance">

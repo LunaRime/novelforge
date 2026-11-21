@@ -13,6 +13,8 @@
   min-height: 0;
 }
 
+.nf-task-drawer { container: task-drawer / inline-size; }
+
 .nf-companion-heading {
   display: flex;
   flex: none;
@@ -100,6 +102,15 @@
 
 .nf-agent-composer:focus-within { border-color: var(--color-accent); }
 
+/* 按文本的实际换行伸缩。在矮窗中长文在输入框里滚动，发送按钮保持可见。 */
+.nf-agent-composer-field {
+  field-sizing: content;
+  min-height: 36px;
+  max-height: min(200px, 24dvh);
+  overflow-y: auto;
+  color: var(--color-text);
+}
+
 .nf-agent-send {
   background: var(--color-workbench-spine);
   color: var(--color-workbench-spine-text);
@@ -110,6 +121,10 @@
 .nf-agent-send[data-generating='true'],
 .nf-agent-send:disabled { background: var(--color-panel); color: var(--color-text-secondary); }
 .nf-agent-send:disabled { cursor: not-allowed; opacity: 0.6; }
+
+@container task-drawer (max-width: 20rem) {
+  .nf-task-drawer .nf-workbench-view-label { display: none; }
+}
 
 @media (pointer: coarse) {
   .nf-agent-send,

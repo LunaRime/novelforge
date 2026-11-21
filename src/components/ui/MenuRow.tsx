@@ -51,7 +51,7 @@ export default function MenuRow({
       <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>{title}</span>
       {titleSuffix}
       {count !== undefined && (
-        <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{count}</span>
+        <span data-menu-row-count className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{count}</span>
       )}
     </>
   )

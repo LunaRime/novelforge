@@ -2,7 +2,7 @@
 
 /* 章头与正文共用稿纸宽度、侧边距和滚动条空间。 */
 .nf-prose-editor {
-  container-type: inline-size;
+  container: manuscript / size;
   --prose-gutter: clamp(8px, 3.2cqi, 40px);
   --prose-inset: clamp(18px, 6cqi, 56px);
   --prose-body-start: clamp(16px, 3cqi, 28px);
@@ -77,6 +77,16 @@
 }
 
 .nf-prose-meta + h1 { margin-block-start: 0.5rem; }
+
+/* 矮窗口优先完整显示章名，同时给正文滚动区留出空间。 */
+@container manuscript (max-height: 18rem) {
+  .nf-prose-heading-gutter { max-height: 55%; padding-block-start: 6px; }
+  .nf-prose-heading { padding-block-start: 8px; }
+  .nf-prose-heading h1 { font-size: var(--text-xl); }
+  .nf-prose-meta + h1 { margin-block-start: 0.25rem; }
+  .nf-prose-heading::after { margin-block-start: 6px; }
+  .nf-prose-editor .cm-content { --prose-body-start: 10px; }
+}
 
 /* ── 消除浏览器默认焦点样式（黄色边框来源）─────────────────────────────── */
 .vela-editor-content:focus,
