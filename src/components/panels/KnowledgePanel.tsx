@@ -2,12 +2,12 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
 import { KnowledgeRequestCancelled } from '../../core'
 import {
-  Database, RefreshCw, BookOpen, Download, SortAsc, Search, Trash2, AlertCircle, Sparkles,
+  Database, RefreshCw, BookOpen, Download, Search, Trash2, AlertCircle, Sparkles,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import MarkdownContent from '../ui/MarkdownContent'
 import { EmptyState } from '../ui/EmptyState'
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
+import { SortSelect } from '../ui/SortSelect'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { useProjectStore } from '../../stores/project-store'
 import { globalEventBus } from '../../shared/event-bus'
@@ -281,24 +281,12 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
           {t('knowledge.indexedChapters')}
         </span>
         {/* 排序选择：章节号 / 导入时间 / 名称 */}
-        <Select
-          value={sortMode}
-          onValueChange={(v) => onSortModeChange(v as 'time' | 'chapter' | 'name')}
-        >
-          <SelectTrigger
-            className="h-6 w-auto min-w-0 max-w-full flex-1 gap-1 text-micro px-1.5"
-            title={t('knowledge.sortBy')}
-            style={{ minWidth: 0, borderColor: 'var(--color-border)' }}
-          >
-            <SortAsc size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="chapter">{t('knowledge.sortChapter')}</SelectItem>
-            <SelectItem value="time">{t('knowledge.sortTime')}</SelectItem>
-            <SelectItem value="name">{t('knowledge.sortName')}</SelectItem>
-          </SelectContent>
-        </Select>
+        <SortSelect value={sortMode} label={t('knowledge.sortBy')} onChange={onSortModeChange}
+          className="min-w-0 flex-1" items={[
+            { value: 'chapter', label: t('knowledge.sortChapter') },
+            { value: 'time', label: t('knowledge.sortTime') },
+            { value: 'name', label: t('knowledge.sortName') },
+          ]} />
       </div>
 
       {loadFailed ? (

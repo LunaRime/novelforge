@@ -45,8 +45,9 @@ export const noticeTexts = {
   'route.tierEmpty': { 'zh-CN': '未指定（回退默认模型）', 'en-US': 'Unset (falls back to the default model)', 'ru-RU': 'Не задано (используется модель по умолчанию)' },
   // ⚠️ 原 `route.tierFirst`（首选 {name}）与 `route.moreCount`（+{n}）已删除（2026-10-16 用户要求）：
   //    卡片上**不再显示模型型号与优先级序号**，名单/顺序一律进「编辑优先级」弹窗看。不要再加回来。
-  'route.dialogTitle': { 'zh-CN': '设置「{tier}」层的模型与优先级', 'en-US': 'Models and priority for the "{tier}" tier', 'ru-RU': 'Модели и приоритет уровня «{tier}»' },
+  'route.dialogTitle': { 'zh-CN': '「{tier}」的模型优先级', 'en-US': 'Models and priority for the "{tier}" tier', 'ru-RU': 'Модели и приоритет уровня «{tier}»' },
   'route.dialogHint': { 'zh-CN': '勾选加入该层；序号 1 最先尝试，失败或超限时按序号依次回退。一个都不勾 = 该层回退到默认模型。', 'en-US': 'Tick to add a model to this tier. Number 1 is tried first; on failure or limit the next number is used. None ticked = this tier falls back to the default model.', 'ru-RU': 'Отметьте модели для этого уровня. Номер 1 пробуется первым, далее по порядку. Если ничего не отмечено — уровень использует модель по умолчанию.' },
+  'route.reorderHint': { 'zh-CN': "拖动整行可调整顺序，也可用两侧箭头逐位调整。", 'en-US': "Drag a row to reorder it, or use the arrow buttons.", 'ru-RU': "Перетащите строку или измените порядок кнопками со стрелками." },
   'route.selectedTitle': { 'zh-CN': '已选（顺序即优先级）', 'en-US': 'Selected (order = priority)', 'ru-RU': 'Выбрано (порядок = приоритет)' },
   'route.candidatesTitle': { 'zh-CN': '可选模型', 'en-US': 'Available models', 'ru-RU': 'Доступные модели' },
   'route.moveUp': { 'zh-CN': '上移一位', 'en-US': 'Move up', 'ru-RU': 'Вверх' },

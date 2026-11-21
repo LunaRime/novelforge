@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ChevronDown, Server, Settings2, Trash2 } from 'lucide-react'
+import { Server, Settings2, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useLLMStore } from '../../stores/llm-store'
 import { isModelOfAccount } from '../../shared/provider-accounts'
@@ -8,7 +8,8 @@ import type { ModelProfile, ProviderAccount } from '../../shared/ipc-channels'
 import { getCurrentLocale } from '../../shared/locale'
 import { renderLog } from '../../services/render-logger'
 import { Button } from '../ui/Button'
-import { CreateIcon, SortDirectionIcon } from '../ui/ActionIcons'
+import { CreateIcon } from '../ui/ActionIcons'
+import { SortSelect } from '../ui/SortSelect'
 import CountBadge from '../ui/CountBadge'
 import MenuRow from '../ui/MenuRow'
 import { Spinner } from '../ui/Spinner'
@@ -215,15 +216,11 @@ export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
         </div>
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           {rows.length + (orphans?.length ?? 0) > 1 && (
-            <div className="nf-settings-sort">
-              <SortDirectionIcon direction="desc" size={14} />
-              <select aria-label={t('model.sortLabel')} value={sort} onChange={event => setSort(event.target.value as ModelSort)}>
-                <option value="configured">{t('model.sortConfigured')}</option>
-                <option value="name">{t('model.sortName')}</option>
-                <option value="modelCount">{t('model.sortModelCount')}</option>
-              </select>
-              <ChevronDown size={12} aria-hidden="true" />
-            </div>
+            <SortSelect<ModelSort> label={t('model.sortLabel')} value={sort} onChange={setSort} items={[
+              { value: 'configured', label: t('model.sortConfigured') },
+              { value: 'name', label: t('model.sortName') },
+              { value: 'modelCount', label: t('model.sortModelCount') },
+            ]} />
           )}
           {!isEmpty && !adding && (
             <Button ref={focusAddButton} type="button" size="lg" onClick={openAdd}>

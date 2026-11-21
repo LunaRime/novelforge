@@ -131,12 +131,12 @@ describe('ProviderRowList 供应商行列表', () => {
     await act(async () => { buttonByLabel('编辑')[1].click() })
     await act(async () => { setValue(keyInput(), 'sk-draft') })
 
-    const sort = el.querySelector<HTMLSelectElement>('select[aria-label="模型列表排序"]')
-    expect(sort).not.toBeNull()
-    await act(async () => {
-      sort!.value = 'name'
-      sort!.dispatchEvent(new Event('change', { bubbles: true }))
-    })
+    const sort = el.querySelector<HTMLButtonElement>('button[aria-label="模型列表排序"]')!
+    expect(sort).toBeTruthy()
+    act(() => { sort.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })) })
+    const name = [...document.querySelectorAll<HTMLElement>('[role="option"]')].find(option => option.textContent?.trim() === '名称')!
+    expect(name).toBeTruthy()
+    act(() => name.click())
 
     expect(el.textContent!.indexOf('Acme Gateway')).toBeLessThan(el.textContent!.indexOf('OpenAI'))
     expect(keyInput().value).toBe('sk-draft')

@@ -183,31 +183,6 @@
   border-block-end: 1px solid var(--color-border);
 }
 
-.nf-settings-sort {
-  display: inline-grid;
-  position: relative;
-  max-width: 100%;
-  align-items: center;
-  color: var(--color-text-secondary);
-}
-
-.nf-settings-sort select {
-  min-height: 2rem;
-  appearance: none;
-  padding-inline: 1.875rem;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-editor-bg);
-  color: var(--color-text);
-  font-size: var(--text-xs);
-  cursor: pointer;
-}
-
-.nf-settings-sort select:hover { border-color: var(--color-accent); }
-.nf-settings-sort select option { background: var(--color-panel); }
-.nf-settings-sort svg { position: absolute; pointer-events: none; }
-.nf-settings-sort svg:first-child { inset-inline-start: 0.625rem; }
-.nf-settings-sort svg:last-child { inset-inline-end: 0.625rem; }
 
 /* 窄窗口把设置目录移到正文上方，当前分区与搜索始终可从键盘访问。 */
 @container settings-window (max-width: 41rem) {

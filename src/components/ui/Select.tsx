@@ -23,7 +23,7 @@ const SelectTrigger = React.forwardRef<
       'bg-[var(--color-panel)] px-3 py-1 text-xs text-[var(--color-text)]',
       'transition-all duration-150 cursor-pointer select-none',
       'hover:border-[var(--color-accent)] hover:bg-[color-mix(in_srgb,var(--color-accent)_4%,var(--color-panel))]',
-      'focus:outline-none focus:border-[var(--color-accent)] focus:ring-2 focus:ring-[var(--color-accent)]/25',
+      'focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] data-[state=open]:border-[var(--color-accent)]',
       'disabled:cursor-not-allowed disabled:opacity-50',
       'data-[placeholder]:text-[var(--color-text-muted)]',
       className
@@ -47,28 +47,29 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       position={position}
+      sideOffset={5}
+      collisionPadding={8}
       className={cn(
         // z-index 必须高于 Modal（--z-modal: 1000）——Select 常在对话框/弹窗内打开，
         // 若低于遮罩层级会被盖住导致"打不开"（Portal 渲染在 body，不受父容器层叠约束）
         'relative z-[calc(var(--z-modal)+10)] min-w-[8rem] overflow-hidden rounded-lg border border-[var(--color-border)]',
-        'bg-[var(--color-panel)] text-[var(--color-text)] shadow-[var(--shadow-popover)]',
+        'bg-[var(--color-editor-bg)] text-[var(--color-text)] shadow-[var(--shadow-popover)]',
         // 入场动画：缩放 + 淡入
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',
         'data-[state=open]:zoom-in-95 data-[state=closed]:zoom-out-95',
         'data-[state=open]:duration-150 data-[state=closed]:duration-100',
-        position === 'popper' && 'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
         className
       )}
       {...props}
     >
       <SelectPrimitive.Viewport
         className={cn(
-          'p-1',
+          'p-1.5 overscroll-contain',
           // 长列表滚动：max-h 限制（视口 60% 或 256px），超出内部滚动——防弹窗超出程序窗口
-          'max-h-[min(60vh,16rem)] overflow-y-auto',
+          'max-h-[min(16rem,var(--radix-select-content-available-height,60dvh))] overflow-y-auto',
           position === 'popper' &&
-            'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]'
+            'w-full min-w-[var(--radix-select-trigger-width)]'
         )}
       >
         {children}
@@ -86,7 +87,7 @@ const SelectItem = React.forwardRef<
   <SelectPrimitive.Item
     ref={ref}
     className={cn(
-      'relative flex w-full cursor-pointer select-none items-center rounded-lg py-1.5 pl-2.5 pr-8 text-xs outline-none',
+      'relative flex w-full cursor-pointer select-none items-center rounded-md min-h-8 py-1.5 pl-2.5 pr-8 text-xs outline-none',
       'transition-colors duration-100',
       'focus:bg-[var(--color-hover)] focus:text-[var(--color-text)]',
       'data-[highlighted]:bg-[var(--color-hover)]',

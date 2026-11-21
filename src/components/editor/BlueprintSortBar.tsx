@@ -11,11 +11,10 @@ import {
   SORT_KEY_LABELS,
   SORT_DIRECTION_LABELS,
 } from '../../stores/blueprint-sort-store'
-import { ListOrdered } from 'lucide-react'
 import { SortDirectionIcon } from '../ui/ActionIcons'
 import { Button } from '../ui/Button'
 import { t, type TextKey } from '../../shared/locale'
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
+import { SortSelect } from '../ui/SortSelect'
 
 const SORT_OPTIONS: BlueprintSortKey[] = [
   'chapter_number',
@@ -31,23 +30,8 @@ export const BlueprintSortBar: React.FC = () => {
 
   return (
     <div className="flex items-center gap-2 px-2 py-1 text-xs">
-      <span className="flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
-        <ListOrdered size={14} aria-hidden="true" />
-        {t('sort.label')}
-      </span>
-      <Select
-        value={config.key}
-        onValueChange={(v) => setSortKey(v as BlueprintSortKey)}
-      >
-        <SelectTrigger className="w-auto text-xs" aria-label={t('sort.chooseMethod')}><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {SORT_OPTIONS.map((key) => (
-            <SelectItem key={key} value={key}>
-              {t(SORT_KEY_LABELS[key] as TextKey)}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+      <SortSelect label={t('sort.chooseMethod')} value={config.key} onChange={setSortKey}
+        items={SORT_OPTIONS.map(value => ({ value, label: t(SORT_KEY_LABELS[value] as TextKey) }))} />
       <Button type="button" variant="outline" size="icon" className="size-8"
         onClick={toggleDirection}
         title={t('sort.current').replace('{label}', t(SORT_DIRECTION_LABELS[config.direction] as TextKey))}
