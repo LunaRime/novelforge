@@ -1,0 +1,24 @@
+name: 功能建议 / Feature request
+description: 提议改进写作流程或现有功能 / Suggest an improvement to a writing workflow or feature
+title: "[Feature] "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: goal
+    attributes:
+      label: 写作场景与遇到的问题 / Writing scenario and problem
+      description: 你正在完成什么任务？目前在哪一步遇到困难？ What are you trying to accomplish, and where do you get stuck?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 希望的行为 / Desired behavior
+      description: 描述理想的操作流程或结果。 Describe the workflow or outcome you would like.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 当前做法或参考 / Current workaround or references
+      description: 可附已有替代方案、相关议题或脱敏示例。 Share workarounds, related issues, or redacted examples.

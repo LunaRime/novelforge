@@ -1,0 +1,42 @@
+name: 问题反馈 / Bug report
+description: 报告崩溃、数据错误或异常行为 / Report a crash, data issue, or unexpected behavior
+title: "[Bug] "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        这是公开表单。涉及安全漏洞时，请使用[私下漏洞报告](https://github.com/LunaRime/novelforge/security/advisories/new)。
+        This form is public. Use [private vulnerability reporting](https://github.com/LunaRime/novelforge/security/advisories/new) for security issues.
+  - type: input
+    id: version
+    attributes:
+      label: NovelForge 版本 / Version
+      description: 附上版本号或提交；说明使用安装版、便携版还是源码运行。 Include the version or commit and how you run the app.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: 操作系统 / Operating system
+      placeholder: Windows 11 x64, macOS 15 arm64, Ubuntu 24.04 x64
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤 / Steps to reproduce
+      description: 从打开应用或项目开始描述。若与项目有关，请说明作品存储类型及能否在新项目复现。 Start from opening the app or project. If relevant, include the project storage type and whether a new project reproduces it.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: 实际行为与预期 / Actual and expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: 附加信息 / Additional context
+      description: 可附脱敏截图或日志。AI 功能问题可补充模型名和协议。请移除 API 密钥、账号信息、私人书稿和可识别路径。 Attach redacted logs or screenshots. For AI issues, the model and protocol can help. Remove credentials, account details, private manuscripts, and identifying paths.
