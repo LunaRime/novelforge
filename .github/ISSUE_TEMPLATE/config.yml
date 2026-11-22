@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 私下报告安全漏洞 / Report a vulnerability privately
+    url: https://github.com/LunaRime/novelforge/security/advisories/new
+    about: 通过私密表单联系维护者 / Contact the maintainers through GitHub's private form
+  - name: 使用文档 / Documentation
+    url: https://lunarime.github.io/novelforge/
+    about: 查看下载、安装和使用指南 / Find downloads, setup, and usage guides
